@@ -926,12 +926,12 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                                           return b;
                                         });
                                         // 保存更新后的题库
-                                        updatedBanks.forEach(b => saveBank(b));
+                                        updatedBanks.forEach(b => saveBank(b, user.id));
                                         // 移除标记
                                         removeFlaggedQuestion(flag.questionId);
                                         setFlaggedQuestions(flaggedQuestions.filter(f => f.questionId !== flag.questionId));
                                         // 刷新题库列表
-                                        setBanks(getBanks());
+                                        setBanks(getBanks(user.id));
                                       }
                                     }}
                                     className="text-gray-400 hover:text-red-500 px-2 py-1 text-xs"
