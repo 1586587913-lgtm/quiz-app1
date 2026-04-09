@@ -17,17 +17,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [importStatus, setImportStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // GitHub Token - 用户已配置的 Token
-  const USER_GITHUB_TOKEN = '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';
+  // GitHub Token - 从 localStorage 读取
+  const USER_GITHUB_TOKEN = ''; // 请在设置中配置 GitHub Token
   
   // 初始化时检查已有的 GitHub Token
   useEffect(() => {
     const savedToken = getGithubToken();
     if (savedToken) {
       setGithubToken(savedToken);
-    } else {
-      // 自动填入用户的 Token
-      setGithubToken(USER_GITHUB_TOKEN);
     }
   }, []);
 
