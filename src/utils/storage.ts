@@ -16,6 +16,7 @@ const KEYS = {
   stats: 'quiz_stats',
   banks: 'quiz_banks',
   masteredQuestions: 'quiz_mastered', // 掌握题库（用户隔离）
+  flaggedQuestions: 'quiz_flagged', // 问题题目标记
 };
 
 // 获取用户专属的题库key
@@ -495,6 +496,47 @@ export function removeMasteredQuestion(questionId: string) {
 
 export function isMastered(questionId: string): boolean {
   return getMasteredQuestions().some(m => m.questionId === questionId);
+}
+
+// ===== 问题题目标记管理 =====
+export interface FlaggedQuestion {
+  questionId: string;
+  bankId: string;
+  flaggedAt: number;
+  note?: string;
+}
+
+export function getFlaggedQuestions(): FlaggedQuestion[] {
+  return JSON.parse(localStorage.getItem(KEYS.flaggedQuestions) || '[]');
+}
+
+export function saveFlaggedQuestions(flagged: FlaggedQuestion[]) {
+  localStorage.setItem(KEYS.flaggedQuestions, JSON.stringify(flagged));
+}
+
+export function addFlaggedQuestion(questionId: string, bankId: string, note?: string) {
+  const flagged = getFlaggedQuestions();
+  // 如果已经标记，先移除
+  const filtered = flagged.filter(f => f.questionId !== questionId);
+  filtered.push({ questionId, bankId, flaggedAt: Date.now(), note });
+  saveFlaggedQuestions(filtered);
+}
+
+export function removeFlaggedQuestion(questionId: string) {
+  const flagged = getFlaggedQuestions().filter(f => f.questionId !== questionId);
+  saveFlaggedQuestions(flagged);
+}
+
+export function isFlagged(questionId: string): boolean {
+  return getFlaggedQuestions().some(f => f.questionId === questionId);
+}
+
+export function getFlaggedQuestionIds(): Set<string> {
+  return new Set(getFlaggedQuestions().map(f => f.questionId));
+}
+
+export function getFlaggedByBank(bankId: string): FlaggedQuestion[] {
+  return getFlaggedQuestions().filter(f => f.bankId === bankId);
 }
 
 // ===== 数据导出/导入（跨设备同步）=====

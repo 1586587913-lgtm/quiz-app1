@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { User, AppPage, QuestionBank, Question } from '../types';
-import { getBanks, saveBank, deleteBank, getStats } from '../utils/storage';
+import { getBanks, saveBank, deleteBank, getStats, getFlaggedQuestions, removeFlaggedQuestion, FlaggedQuestion } from '../utils/storage';
 import { allQuestions } from '../data/questions';
 import { 
   importFromFile, 
@@ -12,7 +12,7 @@ import MathKeyboard from '../components/MathKeyboard';
 
 interface HomePageProps {
   user: User;
-  onNavigate: (page: AppPage) => void;
+  onNavigate: (page: AppPage, bankId?: string) => void;
   onLogout: () => void;
 }
 
@@ -28,6 +28,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
   const [editingBank, setEditingBank] = useState<QuestionBank | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [editingQuestionIndex, setEditingQuestionIndex] = useState<number>(-1);
+  const [showFlaggedList, setShowFlaggedList] = useState(false);
+  const [flaggedQuestions, setFlaggedQuestions] = useState<FlaggedQuestion[]>([]);
   const [newBankName, setNewBankName] = useState('');
   const [newBankDesc, setNewBankDesc] = useState('');
   const [importText, setImportText] = useState('');
@@ -208,9 +210,9 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
   const handleConfirmBank = (bankId: string) => {
     setShowBankSelect(false);
     if (selectedMode === 'practice') {
-      onNavigate('practice');
+      onNavigate('practice', bankId);  // 传递 bankId，确保使用指定题库
     } else {
-      onNavigate('review');
+      onNavigate('review', bankId);
     }
   };
 
@@ -725,6 +727,14 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-800">题库管理</h2>
               <div className="flex gap-2">
+                <button onClick={() => {
+                  setFlaggedQuestions(getFlaggedQuestions());
+                  setShowFlaggedList(true);
+                }}
+                  className="btn text-sm py-2 px-4"
+                  style={{ background: '#ef4444', color: 'white' }}>
+                  ⚑ 问题题目 ({getFlaggedQuestions().length})
+                </button>
                 <button onClick={() => setShowFileImport(true)}
                   className="btn text-sm py-2 px-4"
                   style={{ background: '#10b981', color: 'white' }}>
@@ -805,6 +815,137 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                     <button onClick={() => { setShowImportBank(false); setImportError(''); setImportText(''); setShowMathKeyboard(false); }}
                       className="btn btn-secondary flex-1">取消</button>
                     <button onClick={handleImportJSON} className="btn btn-primary flex-1">导入</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 问题题目列表弹窗 */}
+            {showFlaggedList && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                style={{ background: 'rgba(0,0,0,0.5)' }}>
+                <div className="card w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                      <span className="text-red-500">⚑</span>
+                      问题题目 ({flaggedQuestions.length})
+                    </h3>
+                    <button onClick={() => setShowFlaggedList(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-4">
+                    以下是练题过程中被标记的题目，可以查看原始题目并修改。
+                  </p>
+                  <div className="flex-1 overflow-y-auto space-y-3">
+                    {flaggedQuestions.length === 0 ? (
+                      <div className="text-center py-8 text-gray-400">
+                        <div className="text-4xl mb-2">✨</div>
+                        <div>暂无问题题目</div>
+                      </div>
+                    ) : (
+                      flaggedQuestions.map((flag, idx) => {
+                        // 找到对应的题库和题目
+                        const bank = banks.find(b => b.id === flag.bankId);
+                        const question = bank?.questions.find(q => q.id === flag.questionId);
+                        return (
+                          <div key={flag.questionId} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex items-start gap-3">
+                              <span className="text-red-500 font-bold text-lg">{idx + 1}.</span>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="badge text-xs bg-red-100 text-red-700">⚑ 已标记</span>
+                                  <span className="badge text-xs bg-gray-100 text-gray-600">
+                                    {bank?.name || '未知题库'}
+                                  </span>
+                                  {question && (
+                                    <span className="badge text-xs" style={{
+                                      background: question.type === 'single' ? '#dbeafe' : '#f3e8ff',
+                                      color: question.type === 'single' ? '#1d4ed8' : '#5b21b6',
+                                    }}>
+                                      {question.type === 'single' ? '单选题' : '多选题'}
+                                    </span>
+                                  )}
+                                </div>
+                                {question ? (
+                                  <>
+                                    <p className="text-gray-700 font-medium mb-2">{question.question}</p>
+                                    {question.choices && (
+                                      <div className="space-y-1 mb-2">
+                                        {question.choices.map((c: any) => (
+                                          <div key={c.id} className="text-sm text-gray-600">
+                                            {c.id}. {c.text}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <p className="text-sm text-green-600 font-medium">
+                                      答案：{question.answer?.join(', ')}
+                                    </p>
+                                    <button
+                                      onClick={() => {
+                                        // 打开题目编辑器
+                                        setEditingBank(bank!);
+                                        setEditingQuestion({...question});
+                                        setEditingQuestionIndex(bank!.questions.findIndex(q => q.id === question.id));
+                                        setShowFlaggedList(false);
+                                        setShowQuestionEditor(true);
+                                      }}
+                                      className="mt-2 btn btn-primary text-sm py-1.5"
+                                    >
+                                      编辑此题目
+                                    </button>
+                                  </>
+                                ) : (
+                                  <p className="text-gray-500 text-sm">
+                                    题目已被删除或不存在
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <button
+                                  onClick={() => {
+                                    removeFlaggedQuestion(flag.questionId);
+                                    setFlaggedQuestions(flaggedQuestions.filter(f => f.questionId !== flag.questionId));
+                                  }}
+                                  className="text-gray-400 hover:text-blue-500 px-2 py-1 text-xs"
+                                  title="只移除标记"
+                                >
+                                  移除标记
+                                </button>
+                                {question && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`确定要从题库"${bank?.name}"中删除此题目吗？此操作不可恢复。`)) {
+                                        // 从题库中删除题目
+                                        const updatedBanks = banks.map(b => {
+                                          if (b.id === flag.bankId) {
+                                            return {
+                                              ...b,
+                                              questions: b.questions.filter(q => q.id !== flag.questionId)
+                                            };
+                                          }
+                                          return b;
+                                        });
+                                        // 保存更新后的题库
+                                        updatedBanks.forEach(b => saveBank(b));
+                                        // 移除标记
+                                        removeFlaggedQuestion(flag.questionId);
+                                        setFlaggedQuestions(flaggedQuestions.filter(f => f.questionId !== flag.questionId));
+                                        // 刷新题库列表
+                                        setBanks(getBanks());
+                                      }
+                                    }}
+                                    className="text-gray-400 hover:text-red-500 px-2 py-1 text-xs"
+                                    title="删除题目"
+                                  >
+                                    删除题目
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>

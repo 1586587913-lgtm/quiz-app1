@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Question, ExamSession, AnswerRecord, User } from '../types';
 import type { AppPage } from '../types';
 import { genId, checkAnswer, calculateScore, formatTime } from '../utils/helpers';
-import { saveSession, updateStatsAfterSession, getBanks, removeMasteredQuestion } from '../utils/storage';
+import { saveSession, updateStatsAfterSession, getBanks, removeMasteredQuestion, addFlaggedQuestion, removeFlaggedQuestion, getFlaggedQuestionIds } from '../utils/storage';
 import { generatePracticeSet } from '../utils/helpers';
 import { allQuestions } from '../data/questions';
 import Calculator from '../components/Calculator';
@@ -34,6 +34,9 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
   const [showRemoveWrongConfirm, setShowRemoveWrongConfirm] = useState(false);
   const [correctlyAnsweredInWrongMode, setCorrectlyAnsweredInWrongMode] = useState<string[]>([]);
   const [repeatedOriginalIds, setRepeatedOriginalIds] = useState<Set<string>>(new Set());
+  const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(new Set());
+  const [showFlaggedList, setShowFlaggedList] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
 
   // 初始化题目
   useEffect(() => {
@@ -45,9 +48,13 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
       qs = questionsOverride;
     } else {
       const banks = getBanks(user.id);
+      console.log('[练题] bankId:', bankId);
+      console.log('[练题] 可用题库:', banks.map(b => ({ id: b.id, name: b.name, count: b.questions.length })));
+      
       if (bankId && bankId !== 'default') {
         // 使用指定题库
         const selectedBank = banks.find(b => b.id === bankId);
+        console.log('[练题] 选中题库:', selectedBank?.name, selectedBank?.questions.length);
         const result = selectedBank ? generatePracticeSet(selectedBank.questions) : generatePracticeSet(banks[0]?.questions || []);
         qs = result.questions;
         insufficient = result.insufficient;
@@ -176,22 +183,30 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
     // 错题专练模式：询问是否移除答对的题目
     if (session.mode === 'wrong' && correctlyAnsweredInWrongMode.length > 0) {
       setShowRemoveWrongConfirm(true);
+    } else if (flaggedQuestions.size > 0) {
+      // 有标记的题目，显示标记列表
+      setShowFlaggedList(true);
     } else {
       setFinished(true);
       onNavigate('result', updatedSession.id);
     }
-  }, [session, questions, userAnswers, startTime, onNavigate, correctlyAnsweredInWrongMode]);
+  }, [session, questions, userAnswers, startTime, onNavigate, correctlyAnsweredInWrongMode, flaggedQuestions.size]);
 
   const handleRemoveWrongAndFinish = useCallback((remove: boolean) => {
     if (remove) {
       correctlyAnsweredInWrongMode.forEach(qId => removeMasteredQuestion(qId));
     }
     setShowRemoveWrongConfirm(false);
-    setFinished(true);
-    if (session) {
-      onNavigate('result', session.id);
+    // 检查是否有标记的题目
+    if (flaggedQuestions.size > 0) {
+      setShowFlaggedList(true);
+    } else {
+      setFinished(true);
+      if (session) {
+        onNavigate('result', session.id);
+      }
     }
-  }, [correctlyAnsweredInWrongMode, session, onNavigate]);
+  }, [correctlyAnsweredInWrongMode, session, onNavigate, flaggedQuestions.size]);
 
   if (questions.length === 0) {
     return (
@@ -277,6 +292,7 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
               isSubmitted={submitted.has(currentQ.id)}
               showAnalysis={showAnalysis.has(currentQ.id)}
               isRepeated={currentQ.id.includes('_rep_')}
+              isFlagged={flaggedQuestions.has(currentQ.id)}
               onSelect={(choiceId) => handleSelect(currentQ.id, choiceId, currentQ.type)}
               onSubmit={() => handleSubmitAnswer(currentQ.id)}
               onToggleAnalysis={() => {
@@ -291,6 +307,21 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
               }}
               onPrev={() => setCurrentIndex(i => Math.max(0, i - 1))}
               onNext={() => setCurrentIndex(i => Math.min(totalCount - 1, i + 1))}
+              onToggleFlag={() => {
+                const qId = currentQ.id;
+                const originalId = qId.includes('_rep_') ? qId.split('_rep_')[0] : qId;
+                setFlaggedQuestions(prev => {
+                  const next = new Set(prev);
+                  if (next.has(qId)) {
+                    next.delete(qId);
+                    removeFlaggedQuestion(originalId);
+                  } else {
+                    next.add(qId);
+                    addFlaggedQuestion(originalId, bankId || '');
+                  }
+                  return next;
+                });
+              }}
             />
           )}
         </div>
@@ -480,6 +511,78 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
           </div>
         </div>
       )}
+
+      {/* 标记题目列表 */}
+      {showFlaggedList && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="card max-w-lg w-full max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                <span className="text-red-500">⚑</span>
+                已标记 {flaggedQuestions.size} 道问题题目
+              </h3>
+              <button onClick={() => setShowFlaggedList(false)} className="text-gray-400 hover:text-gray-600">
+                ✕
+              </button>
+            </div>
+            <p className="text-gray-600 text-sm mb-4">
+              以下题目在练题过程中被标记为问题题目，稍后可在「题库管理」中查看和修改。
+            </p>
+            <div className="flex-1 overflow-y-auto space-y-3 mb-4 max-h-96">
+              {Array.from(flaggedQuestions).map((qId, idx) => {
+                const originalId = qId.includes('_rep_') ? qId.split('_rep_')[0] : qId;
+                const q = questions.find(question => question.id === qId || question.id === originalId);
+                if (!q) return null;
+                return (
+                  <div key={qId} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-start gap-2">
+                      <span className="text-red-500 font-bold">{idx + 1}.</span>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-700 line-clamp-2">{q.question}</p>
+                        <p className="text-xs text-gray-400 mt-1">答案：{q.answer.join(', ')}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setFlaggedQuestions(prev => {
+                            const next = new Set(prev);
+                            next.delete(qId);
+                            return next;
+                          });
+                          removeFlaggedQuestion(originalId);
+                        }}
+                        className="text-gray-400 hover:text-red-500 text-sm"
+                        title="取消标记"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => {
+                setShowFlaggedList(false);
+                setFinished(true);
+                if (session) onNavigate('result', session.id);
+              }}
+                className="btn btn-secondary flex-1">
+                稍后处理
+              </button>
+              <button onClick={() => {
+                setShowFlaggedList(false);
+                setFinished(true);
+                if (session) onNavigate('result', session.id);
+              }}
+                className="btn btn-primary flex-1"
+                style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                查看成绩
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -493,16 +596,18 @@ interface QuestionCardProps {
   isSubmitted: boolean;
   showAnalysis: boolean;
   isRepeated?: boolean; // 是否为重复抽取的题目
+  isFlagged?: boolean; // 是否已标记
   onSelect: (choiceId: string) => void;
   onSubmit: () => void;
   onToggleAnalysis: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onToggleFlag?: () => void; // 标记/取消标记
 }
 
 function QuestionCard({
-  question, index, total, userAnswer, isSubmitted, showAnalysis, isRepeated,
-  onSelect, onSubmit, onToggleAnalysis, onPrev, onNext
+  question, index, total, userAnswer, isSubmitted, showAnalysis, isRepeated, isFlagged,
+  onSelect, onSubmit, onToggleAnalysis, onPrev, onNext, onToggleFlag
 }: QuestionCardProps) {
   const isCorrect = isSubmitted && checkAnswer(question, userAnswer);
   const isWrong = isSubmitted && !isCorrect;
@@ -532,8 +637,22 @@ function QuestionCard({
         <span className="badge text-xs" style={{ background: '#f1f5f9', color: '#475569' }}>
           {question.category}
         </span>
+        {/* 标记按钮 */}
+        {onToggleFlag && (
+          <button
+            onClick={onToggleFlag}
+            className={`ml-auto px-2 py-1 text-xs rounded-full border transition-all ${
+              isFlagged
+                ? 'bg-red-100 text-red-700 border-red-300 hover:bg-red-50'
+                : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+            title="标记问题题目"
+          >
+            {isFlagged ? '⚑ 已标记' : '⚐ 标记'}
+          </button>
+        )}
         {isSubmitted && (
-          <span className={`badge text-xs ml-auto ${isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <span className={`badge text-xs ${isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             {isCorrect ? '✓ 正确' : '✗ 错误'}
           </span>
         )}

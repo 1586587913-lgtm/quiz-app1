@@ -1015,50 +1015,63 @@ export async function parseDocx(file: File): Promise<string> {
   return result.value;
 }
 
-// PDF.js CDN 地址
-const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168';
-
 /**
- * 动态加载 PDF.js（CDN 方式，节省打包体积）
+ * 加载 PDF.js 库
+ * 使用多个CDN备选
  */
-async function loadPdfJs() {
-  // 动态加载 PDF.js 主库
-  if (!(window as any).pdfjsLib) {
-    await loadScript(`${PDFJS_CDN}/pdf.min.mjs`, 'module');
-  }
-  return (window as any).pdfjsLib;
-}
-
-/**
- * 动态加载脚本
- */
-function loadScript(src: string, type: string): Promise<void> {
+function loadPdfJs(): Promise<any> {
   return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.type = type === 'module' ? 'module' : 'text/javascript';
-    if (type === 'module') {
-      script.type = 'module';
-      script.innerHTML = `import * as pdfjsLib from '${src}'; window.pdfjsLib = pdfjsLib;`;
-    } else {
-      script.src = src;
+    // 如果已经加载，直接返回
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
     }
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`加载失败: ${src}`));
-    document.head.appendChild(script);
+
+    // CDN列表（按优先级排序）
+    const cdns = [
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174',
+      'https://unpkg.com/pdfjs-dist@3.11.174/build',
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build'
+    ];
+    
+    let cdnIndex = 0;
+    
+    function tryLoadCdn() {
+      if (cdnIndex >= cdns.length) {
+        reject(new Error('所有CDN都加载失败'));
+        return;
+      }
+      
+      const cdnBase = cdns[cdnIndex++];
+      console.log('[PDF.js] 尝试加载:', cdnBase);
+      
+      // 加载主库
+      const script = document.createElement('script');
+      script.src = `${cdnBase}/pdf.min.js`;
+      script.onload = () => {
+        console.log('[PDF.js] 加载成功:', cdnBase);
+        (window as any).pdfjsLib = (window as any).pdfjsLib;
+        (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = `${cdnBase}/pdf.worker.min.js`;
+        resolve((window as any).pdfjsLib);
+      };
+      script.onerror = () => {
+        console.log('[PDF.js] 加载失败，尝试下一个CDN');
+        tryLoadCdn();
+      };
+      document.head.appendChild(script);
+    }
+    
+    tryLoadCdn();
   });
 }
 
 /**
  * 解析 PDF 文件
- * 使用 CDN 按需加载，大幅减少打包体积
  */
 export async function parsePdf(file: File): Promise<string> {
   try {
-    // 从 CDN 加载 PDF.js
+    // 加载 PDF.js
     const pdfjsLib = await loadPdfJs();
-    
-    // 设置 worker（使用 CDN 地址）
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.mjs`;
 
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);

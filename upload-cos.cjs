@@ -67,6 +67,7 @@ function uploadFile(localPath, cosKey) {
   return new Promise((resolve, reject) => {
     const content = fs.readFileSync(localPath);
     const contentType = getContentType(localPath);
+    const isHtml = path.extname(localPath).toLowerCase() === '.html';
     const host = `${config.Bucket}.cos.${config.Region}.myqcloud.com`;
     const pathname = '/' + cosKey;
 
@@ -75,6 +76,16 @@ function uploadFile(localPath, cosKey) {
       'Content-Length': String(content.length),
       'Host': host,
     };
+
+    // 对于HTML文件，设置Content-Disposition: inline让浏览器显示而不是下载
+    if (isHtml) {
+      headers['Content-Disposition'] = 'inline';
+    }
+    
+    // 设置缓存控制，避免被CDN缓存导致下载
+    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    headers['Pragma'] = 'no-cache';
+    headers['Expires'] = '0';
 
     const auth = sign('PUT', pathname, headers, config.SecretId, config.SecretKey);
 
