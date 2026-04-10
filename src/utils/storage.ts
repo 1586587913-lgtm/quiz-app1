@@ -150,8 +150,19 @@ export async function loginWithCloudSync(username: string, password: string): Pr
     return newUser;
   }
   
-  // 本地和云端都没有该用户
-  console.log('本地和云端都没有该用户');
+  // 本地和云端都没有该用户 → 自动创建新账号（支持跨设备首次登录）
+  console.log('本地和云端都没有该用户，自动注册新账号...');
+  const autoUser = register(username, password, username);
+  if (autoUser) {
+    initDefaultBank(autoUser.id);
+    
+    // 尝试同步到云端（静默失败）
+    try { await syncToJsonBin(autoUser.id, username); } catch(e) { /* 忽略 */ }
+    
+    console.log('自动注册成功！', autoUser.id);
+    return autoUser;
+  }
+  
   return null;
 }
 
