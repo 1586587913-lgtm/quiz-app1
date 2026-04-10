@@ -18,7 +18,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 预设的 GitHub Token（用于云端同步）
-  const DEFAULT_GITHUB_TOKEN = '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';
+  const DEFAULT_GITHUB_TOKEN = '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';
   
   // 初始化时检查已有的 GitHub Token，若无则使用默认值
   useEffect(() => {
@@ -57,14 +57,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError('');
     setLoading(true);
     
-    // 检查 GitHub Token
-    const token = getGithubToken();
-    if (!token) {
-      setError('请先填写并验证 GitHub Token');
-      setLoading(false);
-      return;
-    }
-    
     try {
       if (isRegister) {
         if (!form.username || !form.password || !form.displayName) {
@@ -83,10 +75,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        // 注册并同步到 GitHub Gist
+        // 注册并同步到 GitHub Gist（自动使用预设 Token）
         const user = await registerWithCloudSync(form.username, form.password, form.displayName);
         if (!user) {
-          setError('注册失败，请检查 GitHub Token 是否有效');
+          setError('注册失败，请稍后重试');
           setLoading(false);
           return;
         }
@@ -99,10 +91,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        // 登录并从 GitHub Gist 同步数据
+        // 登录并从 GitHub Gist 同步数据（自动使用预设 Token）
         const user = await loginWithCloudSync(form.username, form.password);
         if (!user) {
-          setError('用户名或密码错误，或 GitHub Token 无效');
+          setError('用户名或密码错误');
           setLoading(false);
           return;
         }
