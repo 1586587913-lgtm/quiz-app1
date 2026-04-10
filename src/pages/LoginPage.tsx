@@ -17,8 +17,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [importStatus, setImportStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 预设的 JSONBin Key（用于云端同步）
-  const DEFAULT_JSONBIN_KEY = '$2a$10$8cGYj4BIZxGZnHGNEPEn/eMdK48LEIe213mhYqBA96M/pJDRjZBpW';
+  // 预设的 JSONBin Access Key（用于云端同步）
+  const DEFAULT_JSONBIN_KEY = '$2a$10$RVSQqvdx8S1r1SadSudgjeAuUCrnqN1ugUNRA6JMJ5TYB4VuYa1h2';
   
   // 初始化时检查已有的 JSONBin Key，若无则使用默认值
   useEffect(() => {

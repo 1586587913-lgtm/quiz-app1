@@ -19,14 +19,26 @@ export interface JsonBinUserData {
 // 固定的 bin 名称（用于跨设备访问）
 const BIN_NAME = 'quiz_user_data';
 
-// 保存 JSONBin Master Key 到 localStorage
+// 保存 JSONBin Access Key 到 localStorage
 export function saveJsonBinKey(key: string): void {
   localStorage.setItem('jsonbin_key', key);
 }
 
-// 获取 JSONBin Master Key
+// 获取 JSONBin Access Key
 export function getJsonBinKey(): string | null {
   return localStorage.getItem('jsonbin_key');
+}
+
+// 获取请求头（使用 X-Access-Key 而非 X-Master-Key）
+function getHeaders(): HeadersInit {
+  const key = getJsonBinKey();
+  if (!key) {
+    throw new Error('未设置 JSONBin Key');
+  }
+  return {
+    'Content-Type': 'application/json',
+    'X-Access-Key': key,
+  };
 }
 
 // 保存 bin ID（使用固定 key，新设备也能访问）
@@ -70,7 +82,7 @@ export async function validateJsonBinKey(key: string): Promise<{ valid: boolean;
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': key,
+        'X-Access-Key': key,
         'X-Bin-Name': 'key_validation_test',
       },
       body: JSON.stringify({ test: Date.now() }),
@@ -88,7 +100,7 @@ export async function validateJsonBinKey(key: string): Promise<{ valid: boolean;
     if (data.metadata?.id) {
       await fetch(`${JSONBIN_API}/b/${data.metadata.id}`, {
         method: 'DELETE',
-        headers: { 'X-Master-Key': key },
+        headers: { 'X-Access-Key': key },
       });
     }
 
@@ -107,7 +119,7 @@ async function getOrCreateBin(): Promise<string | null> {
   try {
     // 先尝试读取现有的 bin（通过名称）
     const response = await fetch(`${JSONBIN_API}/b/by-name/${BIN_NAME}`, {
-      headers: getReadHeaders(),
+      headers: getHeaders(),
     });
 
     if (response.ok) {
@@ -123,7 +135,7 @@ async function getOrCreateBin(): Promise<string | null> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': key,
+        'X-Access-Key': key,
         'X-Bin-Name': BIN_NAME,
         'X-Bin-Private': 'true',
       },
@@ -168,7 +180,7 @@ export async function saveToJsonBin(data: JsonBinUserData): Promise<boolean> {
     // 更新 bin 数据
     const response = await fetch(`${JSONBIN_API}/b/${binId}`, {
       method: 'PUT',
-      headers: getWriteHeaders(),
+      headers: getHeaders(),
       body: JSON.stringify(data),
     });
 
@@ -191,7 +203,7 @@ export async function getUserDataFromJsonBin(): Promise<JsonBinUserData | null> 
     // 如果没有 binId，尝试通过名称查找
     if (!binId) {
       const response = await fetch(`${JSONBIN_API}/b/by-name/${BIN_NAME}`, {
-        headers: getReadHeaders(),
+        headers: getHeaders(),
       });
 
       if (response.ok) {
@@ -210,7 +222,7 @@ export async function getUserDataFromJsonBin(): Promise<JsonBinUserData | null> 
 
     // 获取数据
     const response = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
-      headers: getReadHeaders(),
+      headers: getHeaders(),
     });
 
     if (!response.ok) {
