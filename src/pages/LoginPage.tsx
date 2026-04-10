@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { register, login, setCurrentUser, downloadExportData, importUserData, loginWithCloudSync, registerWithCloudSync } from '../utils/storage';
-import { saveGithubToken, getGithubToken, validateGithubToken } from '../utils/gistSync';
+import { saveJsonBinKey, getJsonBinKey, validateJsonBinKey } from '../utils/jsonBinSync';
 import type { User } from '../types';
 
 interface LoginPageProps {
@@ -10,45 +10,44 @@ interface LoginPageProps {
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [isRegister, setIsRegister] = useState(false);
   const [form, setForm] = useState({ username: '', password: '', displayName: '', confirm: '' });
-  const [githubToken, setGithubToken] = useState('');
+  const [jsonBinKey, setJsonBinKey] = useState('');
   const [tokenError, setTokenError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [importStatus, setImportStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 预设的 GitHub Token（用于云端同步）
-  const DEFAULT_GITHUB_TOKEN = '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';
+  // 预设的 JSONBin Key（用于云端同步）
+  const DEFAULT_JSONBIN_KEY = '$2a$10$8cGYj4BIZxGZnHGNEPEn/eMdK48LEIe213mhYqBA96M/pJDRjZBpW';
   
-  // 初始化时检查已有的 GitHub Token，若无则使用默认值
+  // 初始化时检查已有的 JSONBin Key，若无则使用默认值
   useEffect(() => {
-    const savedToken = getGithubToken();
-    if (savedToken) {
-      setGithubToken(savedToken);
+    const savedKey = getJsonBinKey();
+    if (savedKey) {
+      setJsonBinKey(savedKey);
     } else {
-      // 自动填充预设 Token 并保存
-      setGithubToken(DEFAULT_GITHUB_TOKEN);
-      saveGithubToken(DEFAULT_GITHUB_TOKEN);
+      // 自动填充预设 Key 并保存
+      setJsonBinKey(DEFAULT_JSONBIN_KEY);
+      saveJsonBinKey(DEFAULT_JSONBIN_KEY);
     }
   }, []);
 
-  // 验证 GitHub Token
+  // 验证 JSONBin Key
   const handleVerifyToken = async () => {
-    if (!githubToken.trim()) {
-      setTokenError('请输入 GitHub Token');
+    if (!jsonBinKey.trim()) {
+      setTokenError('请输入 JSONBin Key');
       return;
     }
     
     setTokenError('');
-    saveGithubToken(githubToken.trim());
+    saveJsonBinKey(jsonBinKey.trim());
     
-    const result = await validateGithubToken();
+    const result = await validateJsonBinKey(jsonBinKey.trim());
     if (result.valid) {
       setTokenError('');
-      alert(`✅ Token 验证成功！GitHub 用户名: ${result.username}`);
+      alert('✅ JSONBin Key 验证成功！云端同步已就绪');
     } else {
-      setTokenError('❌ Token 无效，请检查后重试');
-      saveGithubToken(''); // 清除无效的 token
+      setTokenError('❌ ' + (result.message || 'Key 无效，请检查后重试'));
     }
   };
 
@@ -75,7 +74,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        // 注册并同步到 GitHub Gist（自动使用预设 Token）
+        // 注册并同步到 JSONBin（自动使用预设 Key）
         const user = await registerWithCloudSync(form.username, form.password, form.displayName);
         if (!user) {
           setError('注册失败，请稍后重试');
@@ -91,7 +90,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        // 登录并从 GitHub Gist 同步数据（自动使用预设 Token）
+        // 登录并从 JSONBin 同步数据（自动使用预设 Key）
         const user = await loginWithCloudSync(form.username, form.password);
         if (!user) {
           setError('用户名或密码错误');
@@ -193,19 +192,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* GitHub Token 输入 */}
+            {/* JSONBin Key 输入 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                GitHub Token
-                <span className="text-xs text-gray-400 ml-1">(必填，用于云端同步)</span>
+                云端同步密钥
+                <span className="text-xs text-gray-400 ml-1">(已自动配置)</span>
               </label>
               <div className="flex gap-2">
                 <input
                   className="input flex-1"
                   type="password"
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                  value={githubToken}
-                  onChange={e => setGithubToken(e.target.value)}
+                  placeholder="请输入 JSONBin Key"
+                  value={jsonBinKey}
+                  onChange={e => setJsonBinKey(e.target.value)}
                 />
                 <button
                   type="button"
@@ -218,17 +217,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 <p className="text-xs text-red-500 mt-1">{tokenError}</p>
               )}
               <p className="text-xs text-gray-400 mt-1">
-                需要 GitHub 账号，在 
-                <a 
-                  href="https://github.com/settings/tokens" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
-                  onClick={e => e.stopPropagation()}
-                >
-                  这里
-                </a>
-                创建 Token，勾选 gist 权限
+                登录账号后数据自动云端同步，无需手动配置
               </p>
             </div>
 
