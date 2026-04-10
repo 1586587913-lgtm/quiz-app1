@@ -171,21 +171,22 @@ export async function loginWithCloudSync(username: string, password: string): Pr
 
 // 注册时同步到 JSONBin
 export async function registerWithCloudSync(username: string, password: string, displayName: string): Promise<User | null> {
-  const key = getJsonBinKey();
-  if (!key) {
-    // 没有 JSONBin Key，纯本地注册
-    console.log('未设置 JSONBin Key，纯本地注册');
-    return register(username, password, displayName);
-  }
-  
+  // 先本地注册（不依赖云端）
   const user = register(username, password, displayName);
   if (!user) return null;
 
   // 初始化内置题库
   initDefaultBank(user.id);
 
-  // 同步到 JSONBin
-  await syncToJsonBin(user.id, username);
+  // 尝试云端同步（失败不影响本地注册）
+  const key = getJsonBinKey();
+  if (key) {
+    try {
+      await syncToJsonBin(user.id, username);
+    } catch (e) {
+      console.log('云端同步暂不可用，已保存到本地');
+    }
+  }
 
   return user;
 }
