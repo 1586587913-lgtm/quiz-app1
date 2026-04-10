@@ -35,7 +35,7 @@ export function getJsonBinKey(): string | null {
   return localStorage.getItem('jsonbin_key');
 }
 
-// 获取请求头
+// 获取请求头（使用 X-Master-Key 以获得完整权限）
 function getHeaders(): HeadersInit {
   const key = getJsonBinKey();
   if (!key) {
@@ -43,7 +43,7 @@ function getHeaders(): HeadersInit {
   }
   return {
     'Content-Type': 'application/json',
-    'X-Access-Key': key,
+    'X-Master-Key': key,
   };
 }
 
@@ -55,7 +55,7 @@ export async function validateJsonBinKey(key: string): Promise<{ valid: boolean;
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Access-Key': key,
+        'X-Master-Key': key,
         'X-Bin-Name': 'key_validation_test_' + Date.now(),
       },
       body: JSON.stringify({ test: true }),
@@ -73,7 +73,7 @@ export async function validateJsonBinKey(key: string): Promise<{ valid: boolean;
     if (data.metadata?.id) {
       await fetch(`${JSONBIN_API}/b/${data.metadata.id}`, {
         method: 'DELETE',
-        headers: { 'X-Access-Key': key },
+        headers: { 'X-Master-Key': key },
       });
     }
 
@@ -119,7 +119,7 @@ async function createUserBin(username: string): Promise<string | null> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Access-Key': key,
+        'X-Master-Key': key,
         'X-Bin-Name': binName,
       },
       body: JSON.stringify({
