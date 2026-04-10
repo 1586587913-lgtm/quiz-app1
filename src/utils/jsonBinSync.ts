@@ -1,7 +1,6 @@
 /**
  * JSONBin.io 云端同步模块
  * 使用 JSONBin 存储用户数据，支持跨设备同步
- * 不需要 GitHub Token，避免被 GitHub 安全扫描拦截
  */
 
 const JSONBIN_API = 'https://api.jsonbin.io/v3';
