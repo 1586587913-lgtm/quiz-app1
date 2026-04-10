@@ -45,7 +45,7 @@ export function login(username: string, password: string): User | null {
   return users.find(u => u.username === username) || null;
 }
 
-// 云端同步登录 - 使用 GitHub Gist
+// === GitHub Gist 云端同步登录 v2 ===
 export async function loginWithCloudSync(username: string, password: string): Promise<User | null> {
   // 1. 先尝试正常本地登录（密码匹配）
   let user = login(username, password);
