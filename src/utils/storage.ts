@@ -1,11 +1,12 @@
 import type { User, ExamSession, UserStats, QuestionBank } from '../types';
 import { allQuestions, sampleQuestions, extendedQuestions, meteringQuestions } from '../data/questions';
 import { 
-  saveUserData,
-  getUserDataFromJsonBin,
-  hasUserDataInCloud,
-  type JsonBinUserData
-} from './jsonBinSync';
+  syncToGist,
+  getGistData,
+  setGithubToken as saveGithubToken,
+  hasGithubToken,
+  validateGithubToken
+} from './gistSync';
 
 const KEYS = {
   users: 'quiz_users',
@@ -44,51 +45,47 @@ export function login(username: string, password: string): User | null {
   return users.find(u => u.username === username) || null;
 }
 
-// 云端同步登录 - 云端可选，本地优先
+// 云端同步登录 - 使用 GitHub Gist
 export async function loginWithCloudSync(username: string, password: string): Promise<User | null> {
   // 1. 先尝试正常本地登录（密码匹配）
   let user = login(username, password);
   
   if (user) {
-    // 本地登录成功
-    console.log('本地登录成功');
+    console.log('本地登录成功，检查云端...');
     
-    // 尝试从云端恢复数据（非阻塞）
-    try {
-      const cloudData = await getUserDataFromJsonBin(username);
-      if (cloudData) {
-        console.log('从云端恢复数据...');
-        // 恢复题库（合并）
-        if (cloudData.banks && cloudData.banks.length > 0) {
-          const localBanks = getBanks(user.id);
-          const mergedBanks = [...localBanks];
-          cloudData.banks.forEach((cloudBank: QuestionBank) => {
-            const idx = mergedBanks.findIndex(b => b.id === cloudBank.id);
-            if (idx < 0) mergedBanks.push(cloudBank);
-          });
-          localStorage.setItem(getBankKey(user.id), JSON.stringify(mergedBanks));
+    // 尝试从云端恢复数据
+    if (hasGithubToken()) {
+      try {
+        const cloudData = await getGistData(username);
+        if (cloudData) {
+          console.log('从 Gist 恢复数据...');
+          // 合并题库
+          if (cloudData.banks && cloudData.banks.length > 0) {
+            const localBanks = getBanks(user.id);
+            const mergedBanks = [...localBanks];
+            cloudData.banks.forEach((cloudBank: QuestionBank) => {
+              const idx = mergedBanks.findIndex(b => b.id === cloudBank.id);
+              if (idx < 0) mergedBanks.push(cloudBank);
+            });
+            localStorage.setItem(getBankKey(user.id), JSON.stringify(mergedBanks));
+          }
+          // 恢复统计
+          if (cloudData.stats) {
+            const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
+            allStats[user.id] = cloudData.stats;
+            localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
+          }
+          // 恢复掌握题库
+          if (cloudData.masteredQuestions?.length > 0) saveMasteredQuestions(cloudData.masteredQuestions);
+          console.log('✅ 云端数据恢复完成！');
         }
-        // 恢复统计
-        if (cloudData.stats) {
-          const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-          allStats[user.id] = cloudData.stats;
-          localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
-        }
-        // 恢复掌握题库
-        if (cloudData.masteredQuestions && cloudData.masteredQuestions.length > 0) {
-          saveMasteredQuestions(cloudData.masteredQuestions);
-        }
-        // 恢复错题
-        if (cloudData.wrongQuestions && cloudData.wrongQuestions.length > 0) {
-          const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-          allStats[user.id] = { ...(allStats[user.id] || createEmptyStats(user.id)), wrongQuestions: cloudData.wrongQuestions.map((w: any) => ({ questionId: w.questionId, wrongCount: w.wrongCount, lastWrongAt: w.lastWrongAt, lastUserAnswer: w.lastUserAnswer })) };
-          localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
-        }
-        console.log('云端数据恢复完成！');
+        // 同步到云端
+        await syncToGist(user.id, username);
+      } catch(e) {
+        console.log('云端同步出错:', e);
       }
-      try { await syncToJsonBin(user.id, username); } catch(e) { /* 忽略 */ }
-    } catch(e) {
-      console.log('云端同步暂不可用');
+    } else {
+      console.log('未配置 GitHub Token，跳过云端同步');
     }
     return user;
   }
@@ -98,26 +95,45 @@ export async function loginWithCloudSync(username: string, password: string): Pr
   const existingUser = users.find(u => u.username === username);
   
   if (existingUser) {
-    // 用户存在但密码不同 → 更新密码并返回（兼容跨设备/重置场景）
     console.log('用户已存在但密码不同，更新密码...');
     localStorage.setItem(`pwd_${username}`, password);
     setCurrentUser(existingUser);
+    
+    // 同步云端
+    if (hasGithubToken()) {
+      try { await syncToGist(existingUser.id, username); } catch(e) { /* 忽略 */ }
+    }
     return existingUser;
   }
   
   // 3. 用户完全不存在 → 尝试从云端恢复
-  console.log('本地未找到用户，检查云端...');
-  let cloudData = null;
-  try { cloudData = await getUserDataFromJsonBin(username); } catch(e) { console.log('云端也不可用'); }
-  
-  if (cloudData) {
-    console.log('从云端创建本地账号...');
-    const newUser = register(username, password, cloudData.username || username);
-    if (!newUser) return null;
-    if (cloudData.banks?.length > 0) localStorage.setItem(getBankKey(newUser.id), JSON.stringify(cloudData.banks)); else initDefaultBank(newUser.id);
-    if (cloudData.stats) localStorage.setItem(KEYS.stats, JSON.stringify({ [newUser.id]: cloudData.stats }));
-    if (cloudData.masteredQuestions?.length > 0) saveMasteredQuestions(cloudData.masteredQuestions);
-    return newUser;
+  if (hasGithubToken()) {
+    console.log('本地未找到用户，检查云端 Gist...');
+    try {
+      const cloudData = await getGistData(username);
+      
+      if (cloudData) {
+        console.log('从云端创建本地账号...');
+        const newUser = register(username, password, cloudData.username || username);
+        if (!newUser) return null;
+        
+        if (cloudData.banks?.length > 0) {
+          localStorage.setItem(getBankKey(newUser.id), JSON.stringify(cloudData.banks));
+        } else {
+          initDefaultBank(newUser.id);
+        }
+        if (cloudData.stats) {
+          localStorage.setItem(KEYS.stats, JSON.stringify({ [newUser.id]: cloudData.stats }));
+        }
+        if (cloudData.masteredQuestions?.length > 0) {
+          saveMasteredQuestions(cloudData.masteredQuestions);
+        }
+        console.log('✅ 云端账号恢复完成！');
+        return newUser;
+      }
+    } catch(e) {
+      console.log('获取云端数据出错:', e);
+    }
   }
   
   // 4. 完全新用户 → 自动注册
@@ -125,56 +141,43 @@ export async function loginWithCloudSync(username: string, password: string): Pr
   const autoUser = register(username, password, username);
   if (autoUser) {
     initDefaultBank(autoUser.id);
-    try { await syncToJsonBin(autoUser.id, username); } catch(e) { /* 忽略 */ }
+    if (hasGithubToken()) {
+      try { await syncToGist(autoUser.id, username); } catch(e) { /* 忽略 */ }
+    }
     return autoUser;
   }
   
   return null;
 }
 
-// 注册时同步到 JSONBin（云端可选）
+// 注册时同步到 Gist
 export async function registerWithCloudSync(username: string, password: string, displayName: string): Promise<User | null> {
-  // 先本地注册（不依赖云端）
+  // 先本地注册
   const user = register(username, password, displayName);
   if (!user) return null;
 
   // 初始化内置题库
   initDefaultBank(user.id);
 
-  // 尝试云端同步（静默失败，不影响用户体验）
-  try {
-    const result = await syncToJsonBin(user.id, username);
-    if (result) {
-      console.log('注册成功，数据已同步到云端');
-    } else {
-      console.log('注册成功，数据已保存到本地（云端暂不可用）');
+  // 尝试同步到 Gist
+  if (hasGithubToken()) {
+    try {
+      const result = await syncToGist(user.id, username);
+      console.log(result ? '✅ 注册成功，数据已同步到 GitHub Gist' : '⚠️ 注册成功，同步失败');
+    } catch (e) {
+      console.log('注册成功，Gist 同步出错:', e);
     }
-  } catch (e) {
-    console.log('注册成功，数据已保存到本地');
+  } else {
+    console.log('注册成功（未配置 Token，数据仅保存在本地）');
   }
 
   return user;
 }
 
-// 同步本地数据到 JSONBin
+// 同步到 Gist（公开函数供其他模块调用）
 export async function syncToJsonBin(userId: string, username: string): Promise<boolean> {
-  try {
-    const banks = getBanks(userId);
-    const stats = getStats(userId);
-    const masteredQuestions = getMasteredQuestions();
-
-    return await saveUserData(
-      username,
-      userId,
-      banks,
-      stats,
-      masteredQuestions,
-      stats.wrongQuestions
-    );
-  } catch (error) {
-    console.error('同步到 JSONBin 失败:', error);
-    return false;
-  }
+  if (!hasGithubToken()) return false;
+  return await syncToGist(userId, username);
 }
 
 // 兼容旧函数名
@@ -184,7 +187,9 @@ export async function syncToCloud(userId: string, username: string, _password?: 
 
 // 登录后调用此函数确保数据同步
 export async function ensureCloudSync(user: User): Promise<void> {
-  await syncToJsonBin(user.id, user.username);
+  if (hasGithubToken()) {
+    await syncToGist(user.id, user.username);
+  }
 }
 
 export function register(username: string, password: string, displayName: string): User | null {

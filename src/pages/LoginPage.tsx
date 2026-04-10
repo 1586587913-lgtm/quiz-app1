@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { register, login, setCurrentUser, downloadExportData, importUserData, loginWithCloudSync, registerWithCloudSync } from '../utils/storage';
-import { saveJsonBinKey, getJsonBinKey, validateJsonBinKey } from '../utils/jsonBinSync';
+import { 
+  setGithubToken as saveGithubToken, 
+  hasGithubToken,
+  validateGithubToken 
+} from '../utils/gistSync';
 import type { User } from '../types';
 
 interface LoginPageProps {
@@ -10,44 +14,45 @@ interface LoginPageProps {
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [isRegister, setIsRegister] = useState(false);
   const [form, setForm] = useState({ username: '', password: '', displayName: '', confirm: '' });
-  const [jsonBinKey, setJsonBinKey] = useState('');
-  const [tokenError, setTokenError] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [tokenStatus, setTokenStatus] = useState<'none' | 'validating' | 'ok' | 'error'>('none');
+  const [tokenMsg, setTokenMsg] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [importStatus, setImportStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // 预设的 JSONBin Master Key（用于云端同步）
-  const DEFAULT_JSONBIN_KEY = '$2a$10$RVSQqvdx8S1r1SadSudgjeAuUCrnqN1ugUNRA6JMJ5TYB4VuYa1h2';
   
-  // 初始化时检查已有的 JSONBin Key，若无则使用默认值
+  // 初始化时检查已有的 GitHub Token
   useEffect(() => {
-    const savedKey = getJsonBinKey();
-    if (savedKey) {
-      setJsonBinKey(savedKey);
-    } else {
-      // 自动填充预设 Key 并保存
-      setJsonBinKey(DEFAULT_JSONBIN_KEY);
-      saveJsonBinKey(DEFAULT_JSONBIN_KEY);
+    // 检查 localStorage 中是否有保存的 token
+    const savedToken = localStorage.getItem('github_token');
+    if (savedToken) {
+      setGithubToken(savedToken);
+      setTokenStatus('ok');
+      setTokenMsg('✅ 已配置');
     }
   }, []);
 
-  // 验证 JSONBin Key
+  // 验证 GitHub Token
   const handleVerifyToken = async () => {
-    if (!jsonBinKey.trim()) {
-      setTokenError('请输入 JSONBin Key');
+    if (!githubToken.trim()) {
+      setTokenStatus('error');
+      setTokenMsg('❌ 请输入 GitHub Token');
       return;
     }
     
-    setTokenError('');
-    saveJsonBinKey(jsonBinKey.trim());
+    setTokenStatus('validating');
+    setTokenMsg('⏳ 验证中...');
     
-    const result = await validateJsonBinKey(jsonBinKey.trim());
+    const result = await validateGithubToken(githubToken.trim());
+    
     if (result.valid) {
-      setTokenError('');
-      alert('✅ JSONBin Key 验证成功！云端同步已就绪');
+      saveGithubToken(githubToken.trim());
+      setTokenStatus('ok');
+      setTokenMsg(`✅ ${result.message}`);
     } else {
-      setTokenError('❌ ' + (result.message || 'Key 无效，请检查后重试'));
+      setTokenStatus('error');
+      setTokenMsg(`❌ ${result.message}`);
     }
   };
 
@@ -74,7 +79,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        // 注册并同步到 JSONBin（自动使用预设 Key）
         const user = await registerWithCloudSync(form.username, form.password, form.displayName);
         if (!user) {
           setError('注册失败，请稍后重试');
@@ -90,7 +94,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        // 登录并从 JSONBin 同步数据（自动使用预设 Key）
         const user = await loginWithCloudSync(form.username, form.password);
         if (!user) {
           setError('用户名或密码错误');
@@ -192,32 +195,44 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* JSONBin Key 输入 */}
+            {/* GitHub Token 输入（云端同步） */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                云端同步密钥
-                <span className="text-xs text-gray-400 ml-1">(已自动配置)</span>
+                🔑 GitHub Token（用于云端同步）
+                {tokenStatus === 'ok' && (
+                  <span className="text-green-500 ml-2 text-xs">✅ 已配置</span>
+                )}
+                {tokenStatus === 'none' && (
+                  <span className="text-orange-400 ml-2 text-xs">可选，配置后可跨设备同步</span>
+                )}
               </label>
               <div className="flex gap-2">
                 <input
                   className="input flex-1"
                   type="password"
-                  placeholder="请输入 JSONBin Key"
-                  value={jsonBinKey}
-                  onChange={e => setJsonBinKey(e.target.value)}
+                  placeholder="ghp_xxxxxxxxxxxx"
+                  value={githubToken}
+                  onChange={e => {
+                    setGithubToken(e.target.value);
+                    if (tokenStatus !== 'validating') setTokenStatus('none');
+                  }}
                 />
                 <button
                   type="button"
                   onClick={handleVerifyToken}
-                  className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg whitespace-nowrap">
-                  验证
+                  disabled={tokenStatus === 'validating'}
+                  className="px-3 py-2 text-xs bg-gray-800 hover:bg-gray-700 text-white rounded-lg whitespace-nowrap disabled:opacity-50">
+                  {tokenStatus === 'validating' ? '验证中...' : '验证'}
                 </button>
               </div>
-              {tokenError && (
-                <p className="text-xs text-red-500 mt-1">{tokenError}</p>
+              {tokenMsg && tokenStatus !== 'ok' && (
+                <p className={`text-xs mt-1 ${tokenStatus === 'error' ? 'text-red-500' : 'text-blue-500'}`}>{tokenMsg}</p>
+              )}
+              {tokenStatus === 'ok' && (
+                <p className="text-xs text-green-600 mt-1">{tokenMsg} 数据将自动同步到 GitHub Gist</p>
               )}
               <p className="text-xs text-gray-400 mt-1">
-                登录账号后数据自动云端同步，无需手动配置
+                在 github.com/settings/tokens 创建，勾选 "gist" 权限
               </p>
             </div>
 
@@ -289,7 +304,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   </svg>
                   {isRegister ? '注册并同步...' : '登录并同步...'}
                 </span>
-              ) : (isRegister ? '注册并登录' : '登录')}
+              ) : (hasGithubToken() ? (isRegister ? '注册并同步到云端' : '登录并同步数据') : (isRegister ? '注册并登录' : '登录'))}
             </button>
           </form>
 
@@ -314,12 +329,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <button
                 onClick={handleExport}
                 className="flex-1 btn btn-secondary py-2 text-xs">
-                📤 备份
+                备份导出
               </button>
               <button
                 onClick={handleImportClick}
                 className="flex-1 btn btn-secondary py-2 text-xs">
-                📥 恢复
+                恢复导入
               </button>
             </div>
             <input
@@ -333,7 +348,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <div className="mt-2 text-xs text-center text-blue-600">{importStatus}</div>
             )}
             <div className="mt-2 text-xs text-gray-400 text-center">
-              自动云端同步 · 备份可跨设备恢复
+              {hasGithubToken() ? 'GitHub Gist 云端同步已启用' : '未配置 Token，数据仅保存在本地浏览器'}
             </div>
           </div>
 
@@ -344,13 +359,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 if (confirm('此操作将清除所有用户数据和题库数据，确定要继续吗？')) {
                   localStorage.removeItem('quiz_users');
                   localStorage.removeItem('quiz_stats');
-                  localStorage.removeItem('quiz_banks');
-                  localStorage.removeItem('quiz_sessions');
-                  localStorage.removeItem('quiz_mastered');
-                  // 清除所有密码记录
+                  // 清除所有用户专属题库
                   Object.keys(localStorage).forEach(key => {
+                    if (key.startsWith('quiz_banks_')) localStorage.removeItem(key);
                     if (key.startsWith('pwd_')) localStorage.removeItem(key);
                   });
+                  localStorage.removeItem('quiz_sessions');
+                  localStorage.removeItem('quiz_mastered');
                   alert('数据已清除，请刷新页面重新注册');
                   window.location.reload();
                 }
@@ -362,7 +377,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </div>
 
         <p className="text-center text-blue-200 text-xs mt-4 opacity-70">
-          数据本地存储 · 安全可靠
+          {hasGithubToken() ? 'GitHub Gist 云端同步 · 多设备通用' : '数据本地存储 · 可选开启云端同步'}
         </p>
       </div>
     </div>
