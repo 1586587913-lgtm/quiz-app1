@@ -186,17 +186,15 @@ export async function fetchJsonBin(binId: string): Promise<JsonBinUserData | nul
 // 通过 bin 名称查找 bin ID
 export async function findJsonBinByName(binName: string): Promise<string | null> {
   try {
-    // JSONBin 通过名称搜索 API
-    const response = await fetch(`${JSONBIN_API}/v3/bins?name=${encodeURIComponent(binName)}`, {
+    // JSONBin 正确的 API：GET /b/by-name/{bin-name}
+    const response = await fetch(`${JSONBIN_API}/b/by-name/${encodeURIComponent(binName)}`, {
       headers: getReadHeaders(),
     });
 
     if (response.ok) {
       const data = await response.json();
-      if (data.bins && data.bins.length > 0) {
-        // 找到匹配的 bin
-        const matching = data.bins.find((b: any) => b.name === binName);
-        return matching ? matching.id : (data.bins[0]?.id || null);
+      if (data.metadata?.id) {
+        return data.metadata.id;
       }
     }
     return null;
