@@ -7,6 +7,7 @@ import {
   getJsonBinKey,
   type JsonBinUserData
 } from './jsonBinSync';
+import { saveBinId, getBinId } from './jsonBinSync';
 
 const KEYS = {
   users: 'quiz_users',
@@ -62,7 +63,7 @@ export async function loginWithCloudSync(username: string, password: string): Pr
     console.log('本地未找到用户，检查 JSONBin...');
     
     // 从 JSONBin 获取用户数据
-    const jsonBinData = await getUserDataFromJsonBin(username);
+    const jsonBinData = await getUserDataFromJsonBin();
     
     if (jsonBinData) {
       console.log('从 JSONBin 恢复用户数据...');
@@ -122,7 +123,7 @@ export async function loginWithCloudSync(username: string, password: string): Pr
   
   // 同步最新数据到 JSONBin
   if (user) {
-    const jsonBinData = await getUserDataFromJsonBin(username);
+    const jsonBinData = await getUserDataFromJsonBin();
     
     if (jsonBinData) {
       // 合并 JSONBin 数据到本地（以 JSONBin 数据优先）
@@ -206,7 +207,7 @@ export async function syncToJsonBin(userId: string, username: string): Promise<b
       lastSync: Date.now(),
     };
 
-    return await saveToJsonBin(username, jsonBinData);
+    return await saveToJsonBin(jsonBinData);
   } catch (error) {
     console.error('同步到 JSONBin 失败:', error);
     return false;

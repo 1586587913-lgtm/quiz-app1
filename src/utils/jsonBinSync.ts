@@ -17,6 +17,9 @@ export interface JsonBinUserData {
   lastSync: number;
 }
 
+// 固定的 bin 名称（用于跨设备访问）
+const BIN_NAME = 'quiz_user_data';
+
 // 保存 JSONBin Master Key 到 localStorage
 export function saveJsonBinKey(key: string): void {
   localStorage.setItem('jsonbin_key', key);
@@ -27,24 +30,17 @@ export function getJsonBinKey(): string | null {
   return localStorage.getItem('jsonbin_key');
 }
 
-// 获取用户专属的 bin 名称
-function getBinName(username: string): string {
-  return `quiz_user_${username}`;
+// 保存 bin ID（使用固定 key，新设备也能访问）
+export function saveBinId(binId: string): void {
+  localStorage.setItem('quiz_jsonbin_id', binId);
 }
 
-// 获取请求头
-function getHeaders(): HeadersInit {
-  const key = getJsonBinKey();
-  if (!key) {
-    throw new Error('未设置 JSONBin Key');
-  }
-  return {
-    'Content-Type': 'application/json',
-    'X-Master-Key': key,
-  };
+// 获取 bin ID
+export function getBinId(): string | null {
+  return localStorage.getItem('quiz_jsonbin_id');
 }
 
-// 获取请求头（包含 JSONBin 秘密 key，用于写入）
+// 获取请求头（用于写入）
 function getWriteHeaders(): HeadersInit {
   const key = getJsonBinKey();
   if (!key) {
@@ -57,7 +53,7 @@ function getWriteHeaders(): HeadersInit {
   };
 }
 
-// 保存 bin 时需要读取的 key（公开读取）
+// 获取请求头（用于读取）
 function getReadHeaders(): HeadersInit {
   const key = getJsonBinKey();
   if (!key) {
@@ -71,15 +67,14 @@ function getReadHeaders(): HeadersInit {
 // 验证 JSONBin Key 是否有效
 export async function validateJsonBinKey(key: string): Promise<{ valid: boolean; message?: string }> {
   try {
-    // 尝试创建一个测试 bin 来验证 key
     const response = await fetch(`${JSONBIN_API}/b`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Master-Key': key,
-        'X-Bin-Private': 'true',
+        'X-Bin-Name': 'key_validation_test',
       },
-      body: JSON.stringify({ test: 'validate' }),
+      body: JSON.stringify({ test: Date.now() }),
     });
 
     if (!response.ok) {
@@ -105,68 +100,124 @@ export async function validateJsonBinKey(key: string): Promise<{ valid: boolean;
   }
 }
 
-// 保存数据到 JSONBin（创建新 bin）
-export async function createJsonBin(username: string, data: JsonBinUserData): Promise<string | null> {
+// 创建或获取 bin（使用固定名称）
+async function getOrCreateBin(): Promise<string | null> {
+  const key = getJsonBinKey();
+  if (!key) return null;
+
   try {
-    const binName = getBinName(username);
-    const response = await fetch(`${JSONBIN_API}/b`, {
+    // 先尝试读取现有的 bin（通过名称）
+    const response = await fetch(`${JSONBIN_API}/b/by-name/${BIN_NAME}`, {
+      headers: getReadHeaders(),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.metadata?.id) {
+        saveBinId(data.metadata.id);
+        return data.metadata.id as string;
+      }
+    }
+
+    // 不存在，创建新 bin
+    const createResponse = await fetch(`${JSONBIN_API}/b`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': getJsonBinKey()!,
-        'X-Bin-Name': binName,
+        'X-Master-Key': key,
+        'X-Bin-Name': BIN_NAME,
         'X-Bin-Private': 'true',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({}),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    if (createResponse.ok) {
+      const result = await createResponse.json();
+      const binId = result.metadata?.id;
+      if (binId) {
+        saveBinId(binId);
+        return binId;
+      }
     }
 
-    const result = await response.json();
-    const binId = result.metadata?.id;
-    
-    if (binId) {
-      localStorage.setItem(`jsonbin_id_${username}`, binId);
-    }
-    
-    return binId || null;
+    return null;
   } catch (error) {
-    console.error('创建 JSONBin 失败:', error);
+    console.error('获取/创建 bin 失败:', error);
     return null;
   }
 }
 
-// 更新 JSONBin 数据
-export async function updateJsonBin(binId: string, data: JsonBinUserData): Promise<boolean> {
+// 保存数据到 JSONBin
+export async function saveToJsonBin(data: JsonBinUserData): Promise<boolean> {
+  const key = getJsonBinKey();
+  if (!key) {
+    console.error('未设置 JSONBin Key');
+    return false;
+  }
+
   try {
+    // 获取或创建 bin
+    let binId = getBinId();
+    if (!binId) {
+      binId = await getOrCreateBin();
+    }
+    if (!binId) {
+      console.error('无法获取 bin ID');
+      return false;
+    }
+
+    // 更新 bin 数据
     const response = await fetch(`${JSONBIN_API}/b/${binId}`, {
       method: 'PUT',
       headers: getWriteHeaders(),
       body: JSON.stringify(data),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    return true;
+    return response.ok;
   } catch (error) {
-    console.error('更新 JSONBin 失败:', error);
+    console.error('保存到 JSONBin 失败:', error);
     return false;
   }
 }
 
-// 获取 JSONBin 数据
-export async function fetchJsonBin(binId: string): Promise<JsonBinUserData | null> {
+// 获取用户数据（从 JSONBin）
+export async function getUserDataFromJsonBin(): Promise<JsonBinUserData | null> {
+  const key = getJsonBinKey();
+  if (!key) return null;
+
   try {
+    // 先检查是否有缓存的 binId
+    let binId = getBinId();
+
+    // 如果没有 binId，尝试通过名称查找
+    if (!binId) {
+      const response = await fetch(`${JSONBIN_API}/b/by-name/${BIN_NAME}`, {
+        headers: getReadHeaders(),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+      if (data.metadata?.id) {
+        binId = data.metadata.id as string;
+        saveBinId(binId);
+      }
+      }
+    }
+
+    if (!binId) {
+      console.log('JSONBin 中没有找到用户数据');
+      return null;
+    }
+
+    // 获取数据
     const response = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
       headers: getReadHeaders(),
     });
 
     if (!response.ok) {
       if (response.status === 404) {
+        // bin 不存在，清除缓存的 binId
+        localStorage.removeItem('quiz_jsonbin_id');
         return null;
       }
       throw new Error(`HTTP ${response.status}`);
@@ -181,67 +232,4 @@ export async function fetchJsonBin(binId: string): Promise<JsonBinUserData | nul
     console.error('获取 JSONBin 数据失败:', error);
     return null;
   }
-}
-
-// 通过 bin 名称查找 bin ID
-export async function findJsonBinByName(binName: string): Promise<string | null> {
-  try {
-    // JSONBin 正确的 API：GET /b/by-name/{bin-name}
-    const response = await fetch(`${JSONBIN_API}/b/by-name/${encodeURIComponent(binName)}`, {
-      headers: getReadHeaders(),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.metadata?.id) {
-        return data.metadata.id;
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// 获取用户的 bin ID（优先从 localStorage，兜底搜索）
-export async function getUserBinId(username: string): Promise<string | null> {
-  // 先从 localStorage 获取
-  const cachedId = localStorage.getItem(`jsonbin_id_${username}`);
-  if (cachedId) {
-    return cachedId;
-  }
-
-  // 兜底：按名称查找
-  const binName = getBinName(username);
-  const binId = await findJsonBinByName(binName);
-  if (binId) {
-    localStorage.setItem(`jsonbin_id_${username}`, binId);
-    return binId;
-  }
-
-  return null;
-}
-
-// 保存用户数据到 JSONBin
-export async function saveToJsonBin(username: string, data: JsonBinUserData): Promise<boolean> {
-  const binId = await getUserBinId(username);
-  
-  if (binId) {
-    // 更新现有 bin
-    return await updateJsonBin(binId, data);
-  } else {
-    // 创建新 bin
-    const newBinId = await createJsonBin(username, data);
-    return newBinId !== null;
-  }
-}
-
-// 获取用户数据（从 JSONBin）
-export async function getUserDataFromJsonBin(username: string): Promise<JsonBinUserData | null> {
-  const binId = await getUserBinId(username);
-  if (!binId) {
-    return null;
-  }
-  
-  return await fetchJsonBin(binId);
 }
