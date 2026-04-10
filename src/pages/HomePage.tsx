@@ -233,7 +233,7 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [user.id]);
 
-  const totalQuestions = banks.reduce((sum, b) => sum + b.questions.length, 0);
+  const totalQuestions = banks.reduce((sum, b) => sum + (b.questions?.length || 0), 0);
   const accuracy = stats && stats.totalQuestions > 0
     ? Math.round((stats.correctCount / stats.totalQuestions) * 100) : 0;
 

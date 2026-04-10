@@ -27,10 +27,10 @@ export default function ReviewMode({ user, onNavigate, bankId }: ReviewModeProps
     if (bankId && bankId !== 'default') {
       // 使用指定题库
       const selectedBank = banks.find(b => b.id === bankId);
-      allQuestionsPool = selectedBank ? selectedBank.questions : [];
+      allQuestionsPool = selectedBank ? (selectedBank.questions || []) : [];
     } else {
       // 合并所有题库
-      const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...b.questions], []);
+      const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
       allQuestionsPool = [...bankQuestions, ...allQuestions];
     }
     

@@ -18,7 +18,7 @@ export default function WrongListPage({ user, onNavigate, onPracticeWrong }: Wro
   const loadWrongQuestions = () => {
     const stats = getStats(user.id);
     const banks = getBanks(user.id);
-    const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...b.questions], []);
+    const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
     const merged = [...bankQuestions, ...allQuestions];
     const seen = new Set<string>();
     const allQ = merged.filter(q => {

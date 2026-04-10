@@ -49,7 +49,7 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
     } else {
       const banks = getBanks(user.id);
       console.log('[练题] bankId:', bankId);
-      console.log('[练题] 可用题库:', banks.map(b => ({ id: b.id, name: b.name, count: b.questions.length })));
+      console.log('[练题] 可用题库:', banks.map(b => ({ id: b.id, name: b.name, count: b.questions?.length || 0 })));
       
       if (bankId && bankId !== 'default') {
         // 使用指定题库
@@ -65,7 +65,7 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
         };
       } else {
         // 合并所有题库
-        const allBankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...b.questions], []);
+        const allBankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
         const merged = [...allBankQuestions];
         // 去重
         const seen = new Set<string>();

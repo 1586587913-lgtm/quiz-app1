@@ -21,7 +21,7 @@ export default function ResultPage({ user, sessionId, onNavigate, onPracticeWron
     const sess = getSession(sessionId);
     setSession(sess);
     const banks = getBanks(user.id);
-    const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...b.questions], []);
+    const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
     const merged = [...bankQuestions, ...allQuestions];
     const seen = new Set<string>();
     const unique = merged.filter(q => {
