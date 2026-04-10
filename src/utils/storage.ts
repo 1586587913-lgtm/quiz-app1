@@ -241,7 +241,13 @@ export function getSession(id: string): ExamSession | null {
 export function getStats(userId: string): UserStats {
   try {
     const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-    return allStats[userId] || createEmptyStats(userId);
+    const stats = allStats[userId];
+    if (!stats) return createEmptyStats(userId);
+    // 确保 wrongQuestions 存在
+    if (!Array.isArray(stats.wrongQuestions)) {
+      stats.wrongQuestions = [];
+    }
+    return stats;
   } catch { return createEmptyStats(userId); }
 }
 

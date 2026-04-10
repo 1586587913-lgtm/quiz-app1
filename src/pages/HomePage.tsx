@@ -1370,18 +1370,18 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                         value={newBankDesc} onChange={e => setNewBankDesc(e.target.value)} />
                     </div>
                     <div className="text-sm text-gray-500">
-                      共 {editingBank.questions.length} 题
+                      共 {(editingBank.questions?.length || 0)} 题
                     </div>
                     <button onClick={() => { setShowEditBank(false); handleOpenQuestionEditor(editingBank); }}
                       className="btn btn-secondary w-full text-sm py-2">
                       + 添加新题目
                     </button>
-                    {editingBank.questions.length > 0 && (
+                    {(editingBank.questions?.length || 0) > 0 && (
                       <div className="max-h-48 overflow-y-auto border rounded-lg">
-                        {editingBank.questions.map((q, idx) => (
+                        {(editingBank.questions || []).map((q, idx) => (
                           <div key={q.id || idx} className="flex items-center justify-between p-2 border-b last:border-b-0 hover:bg-gray-50">
                             <span className="text-sm truncate flex-1 mr-2">
-                              {idx + 1}. {q.question.substring(0, 40)}{q.question.length > 40 ? '...' : ''}
+                              {idx + 1}. {(q.question || '').substring(0, 40)}{(q.question?.length || 0) > 40 ? '...' : ''}
                             </span>
                             <div className="flex gap-1">
                               <button onClick={() => { setShowEditBank(false); handleOpenQuestionEditor(editingBank, idx); }}
@@ -1628,7 +1628,7 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                           <span className="badge text-xs" style={{ background: '#dcfce7', color: '#166534' }}>默认</span>
                         )}
                         <span className="badge text-xs" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
-                          {bank.questions.filter(q => q.type === 'single').length}单选 / {bank.questions.filter(q => q.type === 'multiple').length}多选
+                          {(bank.questions || []).filter(q => q.type === 'single').length}单选 / {(bank.questions || []).filter(q => q.type === 'multiple').length}多选
                         </span>
                       </div>
                       <p className="text-gray-500 text-sm">{bank.description}</p>
@@ -1758,7 +1758,7 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                       <div>
                         <span className="font-medium text-gray-800">{bank.name}</span>
                         <span className="ml-2 text-xs text-gray-500">
-                          {bank.questions.length}题
+                          {(bank.questions?.length || 0)}题
                         </span>
                       </div>
                       <span className="text-blue-500">→</span>
