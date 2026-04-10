@@ -362,7 +362,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </div>
 
         <p className="text-center text-blue-200 text-xs mt-4 opacity-70">
-          云端同步 · 多设备通用 · 安全可靠
+          数据本地存储 · 安全可靠
         </p>
       </div>
     </div>

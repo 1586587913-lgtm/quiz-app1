@@ -44,70 +44,81 @@ export function login(username: string, password: string): User | null {
   return users.find(u => u.username === username) || null;
 }
 
-// 云端同步登录 - 使用 JSONBin
+// 云端同步登录 - 云端可选，本地优先
 export async function loginWithCloudSync(username: string, password: string): Promise<User | null> {
   // 先尝试本地登录
   let user = login(username, password);
   
-  // 如果本地登录成功，尝试从云端恢复数据
   if (user) {
-    console.log('本地登录成功，检查云端数据...');
-    const cloudData = await getUserDataFromJsonBin(username);
+    // 本地登录成功
+    console.log('本地登录成功');
     
-    if (cloudData) {
-      console.log('从云端恢复数据...');
-      
-      // 恢复题库（合并）
-      if (cloudData.banks && cloudData.banks.length > 0) {
-        const localBanks = getBanks(user.id);
-        const mergedBanks = [...localBanks];
-        cloudData.banks.forEach((cloudBank: QuestionBank) => {
-          const idx = mergedBanks.findIndex(b => b.id === cloudBank.id);
-          if (idx < 0) {
-            mergedBanks.push(cloudBank);
-          }
-        });
-        localStorage.setItem(getBankKey(user.id), JSON.stringify(mergedBanks));
+    // 尝试从云端恢复数据（非阻塞，失败不影响登录）
+    try {
+      const cloudData = await getUserDataFromJsonBin(username);
+      if (cloudData) {
+        console.log('从云端恢复数据...');
+        
+        // 恢复题库（合并）
+        if (cloudData.banks && cloudData.banks.length > 0) {
+          const localBanks = getBanks(user.id);
+          const mergedBanks = [...localBanks];
+          cloudData.banks.forEach((cloudBank: QuestionBank) => {
+            const idx = mergedBanks.findIndex(b => b.id === cloudBank.id);
+            if (idx < 0) {
+              mergedBanks.push(cloudBank);
+            }
+          });
+          localStorage.setItem(getBankKey(user.id), JSON.stringify(mergedBanks));
+        }
+        
+        // 恢复统计
+        if (cloudData.stats) {
+          const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
+          allStats[user.id] = cloudData.stats;
+          localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
+        }
+        
+        // 恢复掌握题库
+        if (cloudData.masteredQuestions && cloudData.masteredQuestions.length > 0) {
+          saveMasteredQuestions(cloudData.masteredQuestions);
+        }
+        
+        // 恢复错题
+        if (cloudData.wrongQuestions && cloudData.wrongQuestions.length > 0) {
+          const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
+          allStats[user.id] = {
+            ...(allStats[user.id] || createEmptyStats(user.id)),
+            wrongQuestions: cloudData.wrongQuestions.map((w: any) => ({
+              questionId: w.questionId,
+              wrongCount: w.wrongCount,
+              lastWrongAt: w.lastWrongAt,
+              lastUserAnswer: w.lastUserAnswer,
+            })),
+          };
+          localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
+        }
+        
+        console.log('云端数据恢复完成！');
       }
       
-      // 恢复统计
-      if (cloudData.stats) {
-        const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-        allStats[user.id] = cloudData.stats;
-        localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
-      }
-      
-      // 恢复掌握题库
-      if (cloudData.masteredQuestions && cloudData.masteredQuestions.length > 0) {
-        saveMasteredQuestions(cloudData.masteredQuestions);
-      }
-      
-      // 恢复错题
-      if (cloudData.wrongQuestions && cloudData.wrongQuestions.length > 0) {
-        const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-        allStats[user.id] = {
-          ...(allStats[user.id] || createEmptyStats(user.id)),
-          wrongQuestions: cloudData.wrongQuestions.map((w: any) => ({
-            questionId: w.questionId,
-            wrongCount: w.wrongCount,
-            lastWrongAt: w.lastWrongAt,
-            lastUserAnswer: w.lastUserAnswer,
-          })),
-        };
-        localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
-      }
-      
-      console.log('云端数据恢复完成！');
+      // 尝试同步到云端（静默，不影响用户体验）
+      try { await syncToJsonBin(user.id, username); } catch(e) { /* 忽略 */ }
+    } catch(e) {
+      console.log('云端同步暂不可用，已使用本地数据');
     }
     
-    // 同步本地数据到云端
-    await syncToJsonBin(user.id, username);
     return user;
   }
   
   // 本地登录失败，尝试从云端恢复（用于换设备登录）
   console.log('本地未找到用户，检查云端...');
-  const cloudData = await getUserDataFromJsonBin(username);
+  let cloudData = null;
+  try {
+    cloudData = await getUserDataFromJsonBin(username);
+  } catch(e) {
+    console.log('云端也不可用');
+  }
   
   if (cloudData) {
     console.log('从云端创建本地账号并恢复数据...');
@@ -139,11 +150,12 @@ export async function loginWithCloudSync(username: string, password: string): Pr
     return newUser;
   }
   
+  // 本地和云端都没有该用户
   console.log('本地和云端都没有该用户');
   return null;
 }
 
-// 注册时同步到 JSONBin
+// 注册时同步到 JSONBin（云端可选）
 export async function registerWithCloudSync(username: string, password: string, displayName: string): Promise<User | null> {
   // 先本地注册（不依赖云端）
   const user = register(username, password, displayName);
@@ -152,12 +164,16 @@ export async function registerWithCloudSync(username: string, password: string, 
   // 初始化内置题库
   initDefaultBank(user.id);
 
-  // 尝试云端同步（失败不影响本地注册）
+  // 尝试云端同步（静默失败，不影响用户体验）
   try {
-    await syncToJsonBin(user.id, username);
-    console.log('注册成功，数据已同步到云端');
+    const result = await syncToJsonBin(user.id, username);
+    if (result) {
+      console.log('注册成功，数据已同步到云端');
+    } else {
+      console.log('注册成功，数据已保存到本地（云端暂不可用）');
+    }
   } catch (e) {
-    console.log('注册成功，云端同步暂不可用，已保存到本地');
+    console.log('注册成功，数据已保存到本地');
   }
 
   return user;
