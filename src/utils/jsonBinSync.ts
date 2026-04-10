@@ -1,13 +1,30 @@
 /**
- * JSONBin.io 云端同步模块
+ * JSONBin.io 云端同步模块（带超时控制）
  * 使用 JSONBin 存储用户数据，支持跨设备同步
  * 
  * 同步策略：
  * - 每个用户有独立的 bin，bin 名称 = "quiz_user_{username}"
- * - 使用 X-Access-Key 访问（安全）
+ * - 使用 X-Master-Key 访问
  */
 
 const JSONBIN_API = 'https://api.jsonbin.io/v3';
+const REQUEST_TIMEOUT = 5000; // 5秒超时
+
+// 带超时的 fetch 封装
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout: number = REQUEST_TIMEOUT): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // 用户数据接口
 export interface JsonBinUserData {
@@ -51,7 +68,7 @@ function getHeaders(): HeadersInit {
 export async function validateJsonBinKey(key: string): Promise<{ valid: boolean; message?: string }> {
   try {
     // 用这个 Key 创建/获取 bin 来验证
-    const response = await fetch(`${JSONBIN_API}/b`, {
+    const response = await fetchWithTimeout(`${JSONBIN_API}/b`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,10 +88,12 @@ export async function validateJsonBinKey(key: string): Promise<{ valid: boolean;
     const data = await response.json();
     // 删除测试 bin
     if (data.metadata?.id) {
-      await fetch(`${JSONBIN_API}/b/${data.metadata.id}`, {
-        method: 'DELETE',
-        headers: { 'X-Master-Key': key },
-      });
+      try {
+        await fetchWithTimeout(`${JSONBIN_API}/b/${data.metadata.id}`, {
+          method: 'DELETE',
+          headers: { 'X-Master-Key': key },
+        });
+      } catch(e) { /* 忽略 */ }
     }
 
     return { valid: true, message: 'Key 验证成功' };
@@ -91,7 +110,7 @@ async function getUserBin(username: string): Promise<string | null> {
 
   try {
     const binName = getUserBinName(username);
-    const response = await fetch(`${JSONBIN_API}/b/by-name/${binName}`, {
+    const response = await fetchWithTimeout(`${JSONBIN_API}/b/by-name/${binName}`, {
       headers: getHeaders(),
     });
 
@@ -115,7 +134,7 @@ async function createUserBin(username: string): Promise<string | null> {
 
   try {
     const binName = getUserBinName(username);
-    const response = await fetch(`${JSONBIN_API}/b`, {
+    const response = await fetchWithTimeout(`${JSONBIN_API}/b`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -180,7 +199,7 @@ export async function saveUserData(username: string, userId: string, banks: any[
     };
 
     // 更新 bin 数据
-    const response = await fetch(`${JSONBIN_API}/b/${binId}`, {
+    const response = await fetchWithTimeout(`${JSONBIN_API}/b/${binId}`, {
       method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(data),
@@ -213,7 +232,7 @@ export async function getUserDataFromJsonBin(username: string): Promise<JsonBinU
     }
 
     // 获取数据
-    const response = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
+    const response = await fetchWithTimeout(`${JSONBIN_API}/b/${binId}/latest`, {
       headers: getHeaders(),
     });
 
