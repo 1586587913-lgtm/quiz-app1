@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { register, login, setCurrentUser, downloadExportData, importUserData, loginWithCloudSync, registerWithCloudSync } from '../utils/storage';
+import { useState, useEffect } from 'react';
+import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync } from '../utils/storage';
 import { 
   setGithubToken as saveGithubToken, 
   hasGithubToken,
@@ -19,8 +19,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [tokenMsg, setTokenMsg] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [importStatus, setImportStatus] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 初始化时检查已有的 GitHub Token
   useEffect(() => {
@@ -120,30 +118,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     };
     setCurrentUser(guestUser);
     onLogin(guestUser);
-  };
-
-  const handleExport = () => {
-    downloadExportData();
-  };
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setImportStatus('正在导入...');
-    const result = await importUserData(file);
-    setImportStatus(result.message);
-    
-    if (result.success) {
-      alert(result.message + '\n请重新登录查看导入的数据。');
-      setTimeout(() => window.location.reload(), 1000);
-    }
-    
-    e.target.value = '';
   };
 
   return (
@@ -322,33 +296,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </button>
           </div>
 
-          {/* 数据备份（导出/导入） */}
+          {/* GitHub Token 提示 */}
           <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="text-xs text-gray-500 mb-2 text-center">数据备份</div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleExport}
-                className="flex-1 btn btn-secondary py-2 text-xs">
-                备份导出
-              </button>
-              <button
-                onClick={handleImportClick}
-                className="flex-1 btn btn-secondary py-2 text-xs">
-                恢复导入
-              </button>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleImportFile}
-              className="hidden"
-            />
-            {importStatus && (
-              <div className="mt-2 text-xs text-center text-blue-600">{importStatus}</div>
-            )}
-            <div className="mt-2 text-xs text-gray-400 text-center">
-              {hasGithubToken() ? 'GitHub Gist 云端同步已启用' : '未配置 Token，数据仅保存在本地浏览器'}
+            <div className="text-xs text-gray-400 text-center">
+              {hasGithubToken() ? '✅ GitHub Gist 云端同步已启用' : '未配置 Token，数据仅保存在本地浏览器'}
             </div>
           </div>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { User, AppPage, QuestionBank, Question } from '../types';
-import { getBanks, saveBank, deleteBank, getStats, getFlaggedQuestions, removeFlaggedQuestion, FlaggedQuestion } from '../utils/storage';
+import { getBanks, saveBank, deleteBank, getStats, getFlaggedQuestions, removeFlaggedQuestion, FlaggedQuestion, downloadExportData, importUserData } from '../utils/storage';
 import { allQuestions } from '../data/questions';
 import { 
   importFromFile, 
@@ -351,6 +351,74 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
     };
     saveBank(updatedBank, user.id);
     setBanks(getBanks(user.id));
+    // 更新当前编辑的题库状态
+    if (editingBank?.id === bank.id) {
+      setEditingBank(updatedBank);
+    }
+  };
+
+  // 批量删除题目
+  const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
+  const [showBatchDelete, setShowBatchDelete] = useState(false);
+  
+  // 备份导出/导入
+  const [importStatus, setImportStatus] = useState('');
+  
+  const handleExport = () => {
+    downloadExportData();
+  };
+  
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+  
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImportStatus('正在导入...');
+    const result = await importUserData(file);
+    setImportStatus(result.message);
+    
+    if (result.success) {
+      alert(result.message + '\n请刷新页面查看导入的数据。');
+      setTimeout(() => window.location.reload(), 1000);
+    }
+    
+    e.target.value = '';
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedQuestions.length === 0) {
+      alert('请先选择要删除的题目');
+      return;
+    }
+    if (!confirm(`确定要删除选中的 ${selectedQuestions.length} 道题目吗？此操作不可恢复。`)) return;
+    
+    // 从后往前删除，避免索引变化问题
+    const sortedIndices = [...selectedQuestions].sort((a, b) => b - a);
+    let updatedQuestions = [...editingBank.questions];
+    sortedIndices.forEach(idx => {
+      updatedQuestions.splice(idx, 1);
+    });
+    
+    const updatedBank = {
+      ...editingBank,
+      questions: updatedQuestions,
+      updatedAt: Date.now(),
+    };
+    saveBank(updatedBank, user.id);
+    setBanks(getBanks(user.id));
+    setEditingBank(updatedBank);
+    setSelectedQuestions([]);
+    setShowBatchDelete(false);
+    alert(`已删除 ${selectedQuestions.length} 道题目`);
+  };
+
+  const toggleSelectQuestion = (idx: number) => {
+    setSelectedQuestions(prev => 
+      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+    );
   };
 
   const handleCreateBank = () => {
@@ -616,6 +684,33 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
             <div className="text-xs text-gray-400 mb-4 px-1">
               共 {banks.filter(b => b.id !== 'default').length} 个题库
               <span className="ml-2 text-gray-400">（点击「题库管理」查看详情）</span>
+            </div>
+            
+            {/* 备份导出/导入 */}
+            <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
+              <div className="text-sm font-medium text-gray-700 mb-3">数据备份</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExport}
+                  className="flex-1 btn btn-secondary py-2.5 text-sm">
+                  备份导出
+                </button>
+                <button
+                  onClick={handleImportClick}
+                  className="flex-1 btn btn-secondary py-2.5 text-sm">
+                  恢复导入
+                </button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleImportFile}
+                className="hidden"
+              />
+              {importStatus && (
+                <div className="mt-2 text-xs text-center text-blue-600">{importStatus}</div>
+              )}
             </div>
 
             {/* 模式选择 */}
@@ -1395,23 +1490,60 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                     <div className="text-sm text-gray-500">
                       共 {(editingBank.questions?.length || 0)} 题
                     </div>
-                    <button onClick={() => { setShowEditBank(false); handleOpenQuestionEditor(editingBank); }}
-                      className="btn btn-secondary w-full text-sm py-2">
-                      + 添加新题目
-                    </button>
+                    <div className="flex gap-2 mb-2">
+                      <button onClick={() => { setShowEditBank(false); handleOpenQuestionEditor(editingBank); }}
+                        className="btn btn-secondary flex-1 text-sm py-2">
+                        + 添加新题目
+                      </button>
+                      {(editingBank.questions?.length || 0) > 0 && (
+                        <button onClick={() => { setShowBatchDelete(!showBatchDelete); setSelectedQuestions([]); }}
+                          className={`px-3 py-2 text-sm rounded-lg transition-all ${showBatchDelete ? 'bg-gray-200 text-gray-700' : 'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>
+                          {showBatchDelete ? '取消选择' : '批量选择'}
+                        </button>
+                      )}
+                      {showBatchDelete && (
+                        <button onClick={() => {
+                          if (selectedQuestions.length === editingBank.questions.length) {
+                            setSelectedQuestions([]);
+                          } else {
+                            setSelectedQuestions(editingBank.questions.map((_, i) => i));
+                          }
+                        }}
+                          className="px-3 py-2 text-sm rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-all">
+                          {selectedQuestions.length === editingBank.questions.length ? '取消全选' : '全选'}
+                        </button>
+                      )}
+                      {showBatchDelete && selectedQuestions.length > 0 && (
+                        <button onClick={handleBatchDelete}
+                          className="px-3 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition-all font-medium">
+                          删除选中的 {selectedQuestions.length} 道题目
+                        </button>
+                      )}
+                    </div>
+                    
                     {(editingBank.questions?.length || 0) > 0 && (
                       <div className="max-h-48 overflow-y-auto border rounded-lg">
                         {(editingBank.questions || []).map((q, idx) => (
-                          <div key={q.id || idx} className="flex items-center justify-between p-2 border-b last:border-b-0 hover:bg-gray-50">
+                          <div key={q.id || idx} className={`flex items-center justify-between p-2 border-b last:border-b-0 hover:bg-gray-50 ${selectedQuestions.includes(idx) ? 'bg-red-50' : ''}`}>
+                            {showBatchDelete && (
+                              <input
+                                type="checkbox"
+                                checked={selectedQuestions.includes(idx)}
+                                onChange={() => toggleSelectQuestion(idx)}
+                                className="w-4 h-4 mr-2 accent-red-500"
+                              />
+                            )}
                             <span className="text-sm truncate flex-1 mr-2">
                               {idx + 1}. {(q.question || '').substring(0, 40)}{(q.question?.length || 0) > 40 ? '...' : ''}
                             </span>
-                            <div className="flex gap-1">
-                              <button onClick={() => { setShowEditBank(false); handleOpenQuestionEditor(editingBank, idx); }}
-                                className="text-blue-500 hover:text-blue-700 text-xs px-2 py-1">编辑</button>
-                              <button onClick={() => handleDeleteQuestion(editingBank, idx)}
-                                className="text-red-400 hover:text-red-600 text-xs px-2 py-1">删除</button>
-                            </div>
+                            {!showBatchDelete && (
+                              <div className="flex gap-1">
+                                <button onClick={() => { setShowEditBank(false); handleOpenQuestionEditor(editingBank, idx); }}
+                                  className="text-blue-500 hover:text-blue-700 text-xs px-2 py-1">编辑</button>
+                                <button onClick={() => handleDeleteQuestion(editingBank, idx)}
+                                  className="text-red-400 hover:text-red-600 text-xs px-2 py-1">删除</button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
