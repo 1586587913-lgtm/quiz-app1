@@ -406,13 +406,13 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       updatedQuestions.splice(idx, 1);
     });
     
-    const updatedBank: QuizBank = {
+    const updatedBank: QuestionBank = {
       ...editingBank,
       questions: updatedQuestions,
       updatedAt: Date.now(),
     };
-    saveBank(updatedBank);
-    setBanks(getBanks());
+    saveBank(updatedBank, user.id);
+    setBanks(getBanks(user.id));
     setEditingBank(updatedBank);
     setSelectedQuestions([]);
     setShowBatchDelete(false);
