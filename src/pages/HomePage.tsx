@@ -393,6 +393,10 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       alert('请先选择要删除的题目');
       return;
     }
+    if (!editingBank) {
+      alert('题库加载失败');
+      return;
+    }
     if (!confirm(`确定要删除选中的 ${selectedQuestions.length} 道题目吗？此操作不可恢复。`)) return;
     
     // 从后往前删除，避免索引变化问题
@@ -402,13 +406,13 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       updatedQuestions.splice(idx, 1);
     });
     
-    const updatedBank = {
+    const updatedBank: QuizBank = {
       ...editingBank,
       questions: updatedQuestions,
       updatedAt: Date.now(),
     };
-    saveBank(updatedBank, user.id);
-    setBanks(getBanks(user.id));
+    saveBank(updatedBank);
+    setBanks(getBanks());
     setEditingBank(updatedBank);
     setSelectedQuestions([]);
     setShowBatchDelete(false);
