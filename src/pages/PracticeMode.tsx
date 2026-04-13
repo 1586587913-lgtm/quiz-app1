@@ -51,8 +51,70 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
       console.log('[练题] bankId:', bankId);
       console.log('[练题] 可用题库:', banks.map(b => ({ id: b.id, name: b.name, count: b.questions?.length || 0 })));
       
-      if (bankId && bankId !== 'default') {
-        // 使用指定题库
+      // 处理内置题库选择
+      if (bankId === 'builtin_all') {
+        // 全部题库：用户题库 + 内置题库
+        const allBankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
+        const merged = [...allBankQuestions, ...allQuestions];
+        const seen = new Set<string>();
+        const unique = merged.filter(q => {
+          if (seen.has(q.id)) return false;
+          seen.add(q.id);
+          return true;
+        });
+        const result = generatePracticeSet(unique);
+        qs = result.questions;
+        insufficient = result.insufficient;
+        setRepeatedOriginalIds(result.repeatedOriginalIds);
+        info = {
+          singles: unique.filter(q => q.type === 'single').length,
+          multiples: unique.filter(q => q.type === 'multiple').length
+        };
+      } else if (bankId === 'builtin_electrical') {
+        // 电工基础题库
+        const electrical = allQuestions.filter(q => 
+          q.category === '电路基础' || q.category === '电工安全规程'
+        );
+        const result = generatePracticeSet(electrical);
+        qs = result.questions;
+        insufficient = result.insufficient;
+        setRepeatedOriginalIds(result.repeatedOriginalIds);
+        info = {
+          singles: electrical.filter(q => q.type === 'single').length,
+          multiples: electrical.filter(q => q.type === 'multiple').length
+        };
+      } else if (bankId === 'builtin_metering') {
+        // 二级计量工程师题库
+        const metering = allQuestions.filter(q => q.category === '二级计量工程师');
+        const result = generatePracticeSet(metering);
+        qs = result.questions;
+        insufficient = result.insufficient;
+        setRepeatedOriginalIds(result.repeatedOriginalIds);
+        info = {
+          singles: metering.filter(q => q.type === 'single').length,
+          multiples: metering.filter(q => q.type === 'multiple').length
+        };
+      } else if (bankId === 'default') {
+        // 全部题库：动态合并所有非"全部题库"的题库题目
+        const allBankQuestions = banks
+          .filter(b => b.id !== 'default')
+          .reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
+        const seen = new Set<string>();
+        const unique = allBankQuestions.filter(q => {
+          if (seen.has(q.id)) return false;
+          seen.add(q.id);
+          return true;
+        });
+        const result = generatePracticeSet(unique);
+        qs = result.questions;
+        insufficient = result.insufficient;
+        setRepeatedOriginalIds(result.repeatedOriginalIds);
+        info = {
+          singles: unique.filter(q => q.type === 'single').length,
+          multiples: unique.filter(q => q.type === 'multiple').length
+        };
+      } else if (bankId) {
+        // 使用指定用户题库
         const selectedBank = banks.find(b => b.id === bankId);
         console.log('[练题] 选中题库:', selectedBank?.name, selectedBank?.questions.length);
         const result = selectedBank ? generatePracticeSet(selectedBank.questions) : generatePracticeSet(banks[0]?.questions || []);
@@ -64,24 +126,23 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
           multiples: selectedBank?.questions.filter(q => q.type === 'multiple').length || 0
         };
       } else {
-        // 合并所有题库
-        const allBankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
-        const merged = [...allBankQuestions];
-        // 去重
+        // 没有指定题库：合并所有非"全部题库"的题库题目
+        const allBankQuestions = banks
+          .filter(b => b.id !== 'default')
+          .reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
         const seen = new Set<string>();
-        const unique = merged.filter(q => {
+        const unique = allBankQuestions.filter(q => {
           if (seen.has(q.id)) return false;
           seen.add(q.id);
           return true;
         });
-        const fullPool = unique.length >= 80 ? unique : [...unique, ...allQuestions].filter((q, i, arr) => arr.findIndex(x => x.id === q.id) === i);
-        const result = generatePracticeSet(fullPool);
+        const result = generatePracticeSet(unique);
         qs = result.questions;
         insufficient = result.insufficient;
         setRepeatedOriginalIds(result.repeatedOriginalIds);
         info = {
-          singles: fullPool.filter(q => q.type === 'single').length,
-          multiples: fullPool.filter(q => q.type === 'multiple').length
+          singles: unique.filter(q => q.type === 'single').length,
+          multiples: unique.filter(q => q.type === 'multiple').length
         };
       }
     }

@@ -233,7 +233,20 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [user.id]);
 
-  const totalQuestions = banks.reduce((sum, b) => sum + (b.questions?.length || 0), 0);
+  // 计算题库总量：banks 中排除"全部题库"（它只是其他题库的合并视图）
+  // banks 中包含 bank_electrical, bank_metering 和用户题库
+  const totalQuestions = banks
+    .filter(b => b.id !== 'default')
+    .reduce((sum, b) => sum + (b.questions?.length || 0), 0);
+  
+  // 计算各题库的题目数（用于显示）
+  const electricalCount = allQuestions.filter(q => 
+    q.category === '电路基础' || q.category === '电工安全规程'
+  ).length;
+  const meteringCount = allQuestions.filter(q => 
+    q.category === '计量专业实务' || q.category === '计量法律法规'
+  ).length;
+  
   const accuracy = stats && stats.totalQuestions > 0
     ? Math.round((stats.correctCount / stats.totalQuestions) * 100) : 0;
 
@@ -539,11 +552,15 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-white">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
-                style={{ background: 'rgba(255,255,255,0.2)' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold cursor-help"
+                style={{ background: 'rgba(255,255,255,0.2)' }}
+                title={`用户ID: ${user.id}`}>
                 {user.displayName.charAt(0)}
               </div>
-              <span className="text-sm hidden sm:block">{user.displayName}</span>
+              <div className="flex flex-col">
+                <span className="text-sm hidden sm:block">{user.displayName}</span>
+                <span className="text-xs text-white/60 hidden sm:block" title="用户ID">ID: {user.id}</span>
+              </div>
             </div>
             <button onClick={onLogout}
               className="text-white text-sm px-3 py-1.5 rounded-lg transition-all"
@@ -579,20 +596,26 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
         {activeTab === 'home' && (
           <div>
             {/* 统计卡片 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
               {[
                 { label: '题库总量', value: totalQuestions, unit: '题', color: '#2563eb' },
                 { label: '已做题数', value: stats?.totalQuestions || 0, unit: '题', color: '#7c3aed' },
                 { label: '正确率', value: accuracy, unit: '%', color: '#10b981' },
                 { label: '错题数量', value: stats?.wrongQuestions.length || 0, unit: '题', color: '#f59e0b' },
               ].map((item, i) => (
-                <div key={i} className="card text-center py-5">
+                <div key={i} className="card text-center py-4">
                   <div className="text-3xl font-bold mb-1" style={{ color: item.color }}>
                     {item.value}<span className="text-lg">{item.unit}</span>
                   </div>
                   <div className="text-gray-500 text-sm">{item.label}</div>
                 </div>
               ))}
+            </div>
+            
+            {/* 题库明细提示 */}
+            <div className="text-xs text-gray-400 mb-4 px-1">
+              共 {banks.filter(b => b.id !== 'default').length} 个题库
+              <span className="ml-2 text-gray-400">（点击「题库管理」查看详情）</span>
             </div>
 
             {/* 模式选择 */}
@@ -1618,7 +1641,12 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
 
             {/* 题库列表 */}
             <div className="space-y-3">
-              {banks.map(bank => (
+              {banks.map(bank => {
+                // 全部题库：动态合并所有其他题库的题目，实时计算数量
+                const displayQuestions = bank.id === 'default'
+                  ? banks.filter(b => b.id !== 'default').flatMap(b => b.questions || [])
+                  : (bank.questions || []);
+                return (
                 <div key={bank.id} className="card">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -1628,10 +1656,9 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                           <span className="badge text-xs" style={{ background: '#dcfce7', color: '#166534' }}>默认</span>
                         )}
                         <span className="badge text-xs" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
-                          {(bank.questions || []).filter(q => q.type === 'single').length}单选 / {(bank.questions || []).filter(q => q.type === 'multiple').length}多选
+                          {displayQuestions.filter(q => q.type === 'single').length}单选 / {displayQuestions.filter(q => q.type === 'multiple').length}多选，共{displayQuestions.length}题
                         </span>
                       </div>
-                      <p className="text-gray-500 text-sm">{bank.description}</p>
                       <p className="text-gray-400 text-xs mt-1">
                         创建于 {new Date(bank.createdAt).toLocaleDateString()}
                       </p>
@@ -1650,7 +1677,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* 题目格式说明 */}
@@ -1743,12 +1771,33 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
         {showBankSelect && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: 'rgba(0,0,0,0.5)' }}>
-            <div className="card w-full max-w-md">
+            <div className="card w-full max-w-md max-h-[80vh] overflow-y-auto">
               <h3 className="font-bold text-lg mb-4">
                 选择{selectedMode === 'practice' ? '练题' : '背题'}题库
               </h3>
               <div className="space-y-2">
-                {banks.map(bank => (
+                {/* 全部题库 */}
+                <div
+                  onClick={() => handleConfirmBank('default')}
+                  className="p-3 border-2 border-blue-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition-all"
+                  style={{ background: '#f0f9ff' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-medium text-blue-800">⭐ 全部题库</span>
+                      <span className="ml-2 text-xs text-blue-600">
+                        {totalQuestions}题
+                      </span>
+                    </div>
+                    <span className="text-blue-500">→</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    包含全部题库
+                  </p>
+                </div>
+                
+                {/* 所有题库列表 */}
+                {banks.filter(b => b.id !== 'default').map(bank => (
                   <div
                     key={bank.id}
                     onClick={() => handleConfirmBank(bank.id)}
@@ -1763,7 +1812,6 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                       </div>
                       <span className="text-blue-500">→</span>
                     </div>
-                    <p className="text-sm text-gray-500 mt-1">{bank.description}</p>
                   </div>
                 ))}
               </div>

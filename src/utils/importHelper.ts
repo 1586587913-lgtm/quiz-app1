@@ -125,6 +125,97 @@ function mergeSplitQuestions(text: string): string {
   return mergedLines.join('\n');
 }
 
+/**
+ * 预处理阶段清理噪音（在切分题号之前调用）
+ * 专门清理 OCR 识别出的 APP 界面元素
+ */
+function preCleanNoiseText(text: string): string {
+  if (!text) return '';
+  
+  // 答题反馈类（OCR常见）
+  text = text.replace(/答对了[，,]?\s*好棒[！!]?/gi, '');
+  text = text.replace(/恭喜你[，,]?\s*答对了/gi, '');
+  text = text.replace(/恭喜[，,]?\s*答对/gi, '');
+  text = text.replace(/回答正确/gi, '');
+  text = text.replace(/回答错误/gi, '');
+  text = text.replace(/答错啦/gi, '');
+  text = text.replace(/太棒了/gi, '');
+  text = text.replace(/正确[！!]/gi, '');
+  text = text.replace(/错误[！!]/gi, '');
+  
+  // 按钮/交互类
+  text = text.replace(/我要纠错/gi, '');
+  text = text.replace(/纠错反馈/gi, '');
+  text = text.replace(/查看解析/gi, '');
+  text = text.replace(/查看答案/gi, '');
+  text = text.replace(/下一题/gi, '');
+  text = text.replace(/上一题/gi, '');
+  text = text.replace(/提交答案/gi, '');
+  text = text.replace(/确认提交/gi, '');
+  text = text.replace(/交卷/gi, '');
+  text = text.replace(/开始答题/gi, '');
+  text = text.replace(/再来一次/gi, '');
+  text = text.replace(/重新答题/gi, '');
+  text = text.replace(/跳过/gi, '');
+  text = text.replace(/继续/gi, '');
+  
+  // 提示信息类
+  text = text.replace(/您的答案[：:]/gi, '');
+  text = text.replace(/您的答案/g, '');
+  text = text.replace(/参考答案[：:]?\s*[A-D]?/gi, '');
+  text = text.replace(/参考答案/gi, ''); // 额外清理，确保完全移除
+  text = text.replace(/正确答案[：:]/gi, '');
+  text = text.replace(/本题得分[：:]/gi, '');
+  text = text.replace(/得分[：:]/gi, '');
+  text = text.replace(/用时[：:]/gi, '');
+  text = text.replace(/正确率[：:]/gi, '');
+  text = text.replace(/用时\s*\d+/gi, '');
+  // 清理连续APP界面元素（如"参考答案您的答案查看解析"）
+  text = text.replace(/参考答案[您的答案查看解析]*/gi, '');
+  text = text.replace(/您的答案[参考答案查看解析]*/gi, '');
+  text = text.replace(/查看解析[参考答案您的答案]*/gi, '');
+  
+  // 进度/统计类（谨慎清理，避免误伤题号）
+  // text = text.replace(/第\s*\d+\s*题/gi, ''); // 可能误伤题号，暂时注释
+  text = text.replace(/\d+\s*\/\s*\d+/g, ''); // 进度如 "1/10"
+  // text = text.replace(/共\s*\d+\s*题/gi, ''); // 可能误伤，暂时注释
+  text = text.replace(/已完成[：:]\s*\d+/gi, '');
+  text = text.replace(/未完成[：:]\s*\d+/gi, '');
+  text = text.replace(/进度[：:]\s*\d+/gi, '');
+  // text = text.replace(/题目\s*\d+/gi, ''); // 可能误伤题号，暂时注释
+  
+  // 导航/菜单类
+  text = text.replace(/首页/gi, '');
+  text = text.replace(/题库管理/gi, '');
+  text = text.replace(/我的\s*$/gm, '');
+  text = text.replace(/我的错题/gi, '');
+  text = text.replace(/我的收藏/gi, '');
+  text = text.replace(/学习记录/gi, '');
+  text = text.replace(/练习模式/gi, '');
+  text = text.replace(/背题模式/gi, '');
+  text = text.replace(/考试模式/gi, '');
+  text = text.replace(/题库列表/gi, '');
+  
+  // 版权信息
+  text = text.replace(/羿文教育官网\s*www\.yiwenjy\.com\s*版权所有/gi, '');
+  text = text.replace(/专业网校课程[、，]题库软件[、，]考试用书[、，]资讯信息.*/gi, '');
+  text = text.replace(/yiwenjy\.com/gi, '');
+  text = text.replace(/羿文教育/gi, '');
+  text = text.replace(/羿文/gi, '');
+  
+  // 空行清理
+  text = text.replace(/\n{3,}/g, '\n\n');
+  text = text.replace(/^\s*\n/gm, '');
+  
+  // 清理可能的孤立标点和残留
+  text = text.replace(/^[，、。.：:；;!?！?]+/gm, '');
+  text = text.replace(/[，、。.：:；;!?！?]+$/gm, '');
+  text = text.replace(/^[A-D][.、:：]\s*$/gm, '');
+  text = text.replace(/^\s+$/gm, '');
+  
+  return text;
+}
+
 export function parseTextToQuestions(text: string): Partial<Question>[] {
   // 预处理：统一换行符，清理多余空格
   let cleanText = text
@@ -135,10 +226,32 @@ export function parseTextToQuestions(text: string): Partial<Question>[] {
     .replace(/[ \u00A0]+/g, ' ') // 多个空格合并
     .trim();
 
-  // 合并被 PDF 双栏格式分开的题目
-  cleanText = mergeSplitQuestions(cleanText);
+  // 调试：打印预处理前的文本前500字符
+  console.log('[ImportHelper] ===== 预处理前文本（前500字符）=====');
+  console.log(cleanText.substring(0, 500));
 
+  // 关键：在切分题号之前先清理 APP 界面噪音！
+  // 先记录原始文本中的题号
+  const originalQuestionNumRegex = /(^|[\n\s（【])([1-9]\d*)[.、)\])】\]]/gm;
+  const originalMatches = [];
+  let originalMatch;
+  while ((originalMatch = originalQuestionNumRegex.exec(cleanText)) !== null) {
+    originalMatches.push(originalMatch[2]);
+  }
+  console.log(`[ImportHelper] 原始文本中找到题号：${originalMatches.join(', ')}`);
+  
+  cleanText = preCleanNoiseText(cleanText);
+
+  // 调试：打印预处理后的文本前500字符
+  console.log('[ImportHelper] ===== 预处理后文本（前500字符）=====');
+  console.log(cleanText.substring(0, 500).replace(/\n/g, '\\n'));
   console.log('[ImportHelper] 预处理后文本长度:', cleanText.length);
+  
+  // 调试：打印完整的 cleanText（如果是短文本）
+  if (cleanText.length < 3000) {
+    console.log('[ImportHelper] ===== 完整预处理文本 =====');
+    console.log(cleanText.replace(/\n/g, '\\n'));
+  }
 
   if (!cleanText || cleanText.length < 10) {
     console.log('[ImportHelper] 文本太短，无法解析');
@@ -155,10 +268,11 @@ export function parseTextToQuestions(text: string): Partial<Question>[] {
   
   const blocks: string[] = [];
   
-  // 题号正则：排除解析中的列表序号 (1)(2)
-  // 题号前必须是：行首、换行、空格、或开头括号如【或（
-  // 不能是：中文字符后紧跟的数字
-  const questionNumRegex = /(^|[\n\s（【])([1-9]\d*)[.、)\])】\]]/gm;
+  // 题号正则：更宽松的匹配
+  // 匹配格式：数字 + [.、)\])】\]\uff0c\uff0e] 或数字 + [.、)] + 空格
+  // 避免匹配解析中的列表序号 (1)(2)
+  // 排除数字后跟点然后直接跟大写字母的情况（如 "26.U95" 是题目内容，不是题号）
+  const questionNumRegex = /(^|\n|\r|\s)([1-9]\d*)[.、)\])】\]\uff0c\uff0e](?!\s*[A-Z])\s*/gm;
   const questionPositions: { start: number; num: string }[] = [];
   
   let match;
@@ -172,6 +286,17 @@ export function parseTextToQuestions(text: string): Partial<Question>[] {
   }
   
   console.log(`[ImportHelper] 找到 ${questionPositions.length} 个题号`);
+  if (questionPositions.length > 0) {
+    console.log(`[ImportHelper] 题号位置示例：前5个 - ${questionPositions.slice(0, 5).map(p => `位置${p.start}:题号${p.num}`).join(', ')}`);
+    // 调试：打印题号附近的原始文本
+    if (questionPositions.length <= 5) {
+      questionPositions.forEach((p, idx) => {
+        const start = Math.max(0, p.start - 10);
+        const end = Math.min(cleanText.length, p.start + 50);
+        console.log(`[ImportHelper] 题号${idx}位置${p.start}附近文本: "${cleanText.slice(start, end).replace(/\n/g, '\\n')}"`);
+      });
+    }
+  }
   
   // 按题号位置切分块
   if (questionPositions.length > 0) {
@@ -184,12 +309,17 @@ export function parseTextToQuestions(text: string): Partial<Question>[] {
       const block = cleanText.slice(start, end).trim();
       if (block.length > 5) {
         blocks.push(block);
+        // 调试：记录前几个块的内容摘要
+        if (i < 3) {
+          console.log(`[ImportHelper] 块${i}摘要: ${block.substring(0, 100).replace(/\n/g, ' ')}...`);
+        }
       }
     }
     console.log(`[ImportHelper] 按题号切分出 ${blocks.length} 个块`);
   }
   
   // 备选策略：基于参考答案切分
+  console.log(`[ImportHelper] 题号切分后块数: ${blocks.length}, 触发条件: blocks.length < 10 = ${blocks.length < 10}`);
   if (blocks.length < 10) {
     console.log('[ImportHelper] 题号切分块数不足，尝试参考答案策略...');
     
@@ -232,7 +362,49 @@ export function parseTextToQuestions(text: string): Partial<Question>[] {
       console.log(`[ImportHelper] 按参考答案切分出 ${blocks.length} 个块`);
     }
   }
-  
+
+  // 第三策略：基于选项切分（当其他方法都失败时）
+  // 如果题号检测失败（questionPositions.length === 0）且块数异常（不是1），尝试选项切分
+  // 或者块数为0或太多（说明切分失败）
+  if (blocks.length === 0 || blocks.length > 5 || (questionPositions.length === 0 && blocks.length !== 1)) {
+    console.log('[ImportHelper] 尝试选项切分策略...');
+    
+    // 查找所有选项A作为可能的题目开始
+    const optionARegex = /A[.、:：]/g;
+    const optionAPositions: number[] = [];
+    
+    let matchA;
+    while ((matchA = optionARegex.exec(cleanText)) !== null) {
+      optionAPositions.push(matchA.index);
+    }
+    
+    console.log(`[ImportHelper] 找到 ${optionAPositions.length} 个A选项位置`);
+    
+    if (optionAPositions.length > 0) {
+      blocks.length = 0; // 清空
+      
+      // 对每个A选项位置，向前找题号或换行作为题目开始
+      for (let i = 0; i < optionAPositions.length; i++) {
+        const aPos = optionAPositions[i];
+        
+        // 向前搜索：找到最近的换行作为题目开始
+        const beforeText = cleanText.slice(0, aPos);
+        const lastNewline = beforeText.lastIndexOf('\n');
+        const blockStart = lastNewline > 0 ? lastNewline + 1 : 0;
+        
+        const blockEnd = i < optionAPositions.length - 1 
+          ? optionAPositions[i + 1] 
+          : cleanText.length;
+        
+        const block = cleanText.slice(blockStart, blockEnd).trim();
+        if (block.length > 20) { // 最小长度要求
+          blocks.push(block);
+        }
+      }
+      console.log(`[ImportHelper] 按选项切分出 ${blocks.length} 个块`);
+    }
+  }
+
   // 最后备选：整段解析
   if (blocks.length === 0) {
     console.log('[ImportHelper] 无法切分，整段解析');
@@ -240,6 +412,59 @@ export function parseTextToQuestions(text: string): Partial<Question>[] {
   }
 
   console.log(`[ImportHelper] 最终切分出 ${blocks.length} 个块`);
+
+  // ─────────────────────────────────────────────────────────────
+  // 新增：后处理 - 合并不完整的题目块
+  // ─────────────────────────────────────────────────────────────
+  // 检测选项完整性，合并被错误分割的题目
+  const mergedBlocks: string[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const currentBlock = blocks[i];
+    
+    // 检查当前块是否只包含部分选项
+    const hasOptionA = /A[.、:：]/.test(currentBlock);
+    const hasOptionB = /B[.、:：]/.test(currentBlock);
+    const hasOptionC = /C[.、:：]/.test(currentBlock);
+    const hasOptionD = /D[.、:：]/.test(currentBlock);
+    
+    const hasCompleteSet = hasOptionA && hasOptionB && hasOptionC && hasOptionD;
+    
+    // 如果当前块不完整且不是最后一个块，检查是否可以与下一个块合并
+    if (!hasCompleteSet && i < blocks.length - 1) {
+      const nextBlock = blocks[i + 1];
+      const nextHasOptionB = /B[.、:：]/.test(nextBlock);
+      const nextHasOptionC = /C[.、:：]/.test(nextBlock);
+      const nextHasOptionD = /D[.、:：]/.test(nextBlock);
+      
+      // 当前块有A，但缺少B、C、D，而下一个块有B、C、D，则合并
+      if (hasOptionA && !hasOptionB && !hasOptionC && !hasOptionD && 
+          (nextHasOptionB || nextHasOptionC || nextHasOptionD)) {
+        console.log(`[ImportHelper] 合并不完整块 ${i} 和 ${i+1}：当前只有A，下一个有后续选项`);
+        mergedBlocks.push(currentBlock + '\n' + nextBlock);
+        i++; // 跳过下一个块
+        continue;
+      }
+      
+      // 当前块没有选项或只有A，下一个块有完整选项集，合并
+      const nextHasCompleteSet = /A[.、:：]/.test(nextBlock) && /B[.、:：]/.test(nextBlock) && 
+                                 /C[.、:：]/.test(nextBlock) && /D[.、:：]/.test(nextBlock);
+      if ((!hasOptionA && !hasOptionB && !hasOptionC && !hasOptionD) && nextHasCompleteSet) {
+        console.log(`[ImportHelper] 合并块 ${i} 和 ${i+1}：当前无选项，下一个有完整选项`);
+        mergedBlocks.push(currentBlock + '\n' + nextBlock);
+        i++;
+        continue;
+      }
+    }
+    
+    // 其他情况：直接添加当前块
+    mergedBlocks.push(currentBlock);
+  }
+  
+  if (mergedBlocks.length !== blocks.length) {
+    console.log(`[ImportHelper] 合并后块数：${mergedBlocks.length}（原${blocks.length}）`);
+    blocks.length = 0;
+    blocks.push(...mergedBlocks);
+  }
 
   // ─────────────────────────────────────────────────────────────
   // 第二步：逐个解析题目块
@@ -927,17 +1152,103 @@ function cleanNoiseText(text: string): string {
   text = text.replace(/羿文教育官网\s*www\.yiwenjy\.com\s*版权所有/gi, '');
   text = text.replace(/专业网校课程[、，]题库软件[、，]考试用书[、，]资讯信息.*/gi, '');
   text = text.replace(/yiwenjy\.com/gi, '');
-  
+
   // 去除页码
   text = text.replace(/\s+\d+\s*$/g, '');
-  
+
   // 去除网址
   text = text.replace(/https?:\/\/[^\s]+/gi, '');
   text = text.replace(/www\.[a-zA-Z0-9]+\.[a-zA-Z]+/gi, '');
-  
+
   // 去除选项残留（如果还没被提取）
   text = text.replace(/^[A-D]\s*[.、:：]\s*/, '');
+
+  // ─────────────────────────────────────────────────────────────
+  // APP界面元素噪音过滤（OCR识别常见噪音）
+  // ─────────────────────────────────────────────────────────────
   
+  // 答题反馈类
+  text = text.replace(/答对了[，,]?\s*好棒[！!]?/gi, '');
+  text = text.replace(/恭喜你[，,]?\s*答对了/gi, '');
+  text = text.replace(/回答正确/gi, '');
+  text = text.replace(/回答错误/gi, '');
+  text = text.replace(/答错啦/gi, '');
+  
+  // 特别处理：选项后面紧跟噪音的情况（如 "○）DEEQ答对了，好棒！A我要纠错"）
+  // 匹配选项标记（A. B. C. D. 或 A、B、C、D 或 A：B：C：D：）后面到下一个选项标记之间的噪音
+  text = text.replace(/([A-D][.、:：])[^A-D\n]*?答对了[^A-D\n]*?(?=[A-D][.、:：]|$)/gi, '$1');
+  text = text.replace(/([A-D][.、:：])[^A-D\n]*?我要纠错[^A-D\n]*?(?=[A-D][.、:：]|$)/gi, '$1');
+  text = text.replace(/([A-D][.、:：])[^A-D\n]*?参考答案[^A-D\n]*?(?=[A-D][.、:：]|$)/gi, '$1');
+  text = text.replace(/([A-D][.、:：])[^A-D\n]*?您的答案[^A-D\n]*?(?=[A-D][.、:：]|$)/gi, '$1');
+  text = text.replace(/([A-D][.、:：])[^A-D\n]*?查看解析[^A-D\n]*?(?=[A-D][.、:：]|$)/gi, '$1');
+  
+  // 按钮/交互类
+  text = text.replace(/我要纠错/gi, '');
+  text = text.replace(/纠错/gi, '');
+  text = text.replace(/查看解析/gi, '');
+  text = text.replace(/查看答案/gi, '');
+  text = text.replace(/下一题/gi, '');
+  text = text.replace(/上一题/gi, '');
+  text = text.replace(/提交答案/gi, '');
+  text = text.replace(/确认提交/gi, '');
+  text = text.replace(/交卷/gi, '');
+  text = text.replace(/开始答题/gi, '');
+  text = text.replace(/再来一次/gi, '');
+  
+  // 提示信息类
+  text = text.replace(/您的答案[：:]/gi, '');
+  text = text.replace(/参考答案[：:]?\s*[A-D]?/gi, '');
+  text = text.replace(/正确答案[：:]/gi, '');
+  text = text.replace(/本题得分[：:]/gi, '');
+  text = text.replace(/得分[：:]/gi, '');
+  text = text.replace(/用时[：:]/gi, '');
+  text = text.replace(/正确率[：:]/gi, '');
+  
+  // 进度/统计类
+  text = text.replace(/第\s*\d+\s*题/gi, '');
+  text = text.replace(/\d+\s*\/\s*\d+/g, ''); // 如 "3/10"
+  text = text.replace(/共\s*\d+\s*题/gi, '');
+  text = text.replace(/已完成[：:]\s*\d+/gi, '');
+  text = text.replace(/未完成[：:]\s*\d+/gi, '');
+  
+  // 导航/菜单类
+  text = text.replace(/首页/gi, '');
+  text = text.replace(/题库/gi, '');
+  text = text.replace(/我的/gi, '');
+  text = text.replace(/我的错题/gi, '');
+  text = text.replace(/我的收藏/gi, '');
+  text = text.replace(/学习记录/gi, '');
+  text = text.replace(/练习模式/gi, '');
+  text = text.replace(/背题模式/gi, '');
+  
+  // 空行和多余空格清理
+  text = text.replace(/\n{3,}/g, '\n\n'); // 超过2个连续换行改为2个
+  text = text.replace(/^\s*\n/gm, ''); // 清理空行
+  text = text.replace(/\n\s*$/g, ''); // 清理行尾空格
+  
+  // 清理可能残留的标点和符号
+  text = text.replace(/^[，、。.：:；;!?！?]+/gm, ''); // 行首标点
+  text = text.replace(/[，、。.：:；;!?！?]+$/gm, ''); // 行尾标点
+  text = text.replace(/^[A-D][.、:：]\s*$/gm, ''); // 只有选项标记的空行
+  
+  // 最后再次清理可能的广告噪音
+  text = text.replace(/^\s*羿文[教育\s]*/gim, '');
+  text = text.replace(/羿文教育/gi, '');
+  text = text.replace(/yiwenjy\.com/gi, '');
+  text = text.replace(/www\.yiwenjy\.com/gi, '');
+  
+  // 清理过短的行（可能是噪音残留）
+  const lines = text.split('\n').filter(line => {
+    const trimmed = line.trim();
+    // 跳过空行或只有标点的行
+    if (!trimmed || /^[，、。.：:；;!?！?]+$/.test(trimmed)) return false;
+    // 跳过只有单个或两个字符的行（可能是噪音残留）
+    if (trimmed.length <= 1) return false;
+    return true;
+  });
+  
+  text = lines.join('\n');
+
   return text.trim();
 }
 

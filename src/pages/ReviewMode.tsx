@@ -24,14 +24,34 @@ export default function ReviewMode({ user, onNavigate, bankId }: ReviewModeProps
     const banks = getBanks(user.id);
     let allQuestionsPool: Question[] = [];
     
-    if (bankId && bankId !== 'default') {
-      // 使用指定题库
+    // 处理内置题库选择
+    if (bankId === 'builtin_all') {
+      // 全部题库：用户题库 + 内置题库
+      const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
+      allQuestionsPool = [...bankQuestions, ...allQuestions];
+    } else if (bankId === 'builtin_electrical') {
+      // 电工基础题库
+      allQuestionsPool = allQuestions.filter(q => 
+        q.category === '电路基础' || q.category === '电工安全规程'
+      );
+    } else if (bankId === 'builtin_metering') {
+      // 二级计量工程师题库
+      allQuestionsPool = allQuestions.filter(q => q.category === '二级计量工程师');
+    } else if (bankId === 'default') {
+      // 全部题库：动态合并所有非"全部题库"的题库题目
+      const bankQuestions = banks
+        .filter(b => b.id !== 'default')
+        .reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
+      allQuestionsPool = bankQuestions;
+    } else if (bankId) {
+      // 使用指定用户题库
       const selectedBank = banks.find(b => b.id === bankId);
       allQuestionsPool = selectedBank ? (selectedBank.questions || []) : [];
     } else {
-      // 合并所有题库
-      const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
-      allQuestionsPool = [...bankQuestions, ...allQuestions];
+      // 没有指定题库：合并所有非"全部题库"的题库题目
+      allQuestionsPool = banks
+        .filter(b => b.id !== 'default')
+        .reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
     }
     
     // 去重

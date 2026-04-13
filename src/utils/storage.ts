@@ -377,43 +377,67 @@ export function deleteBank(id: string, userId: string) {
 }
 
 // 初始化内置题库
+// 内置题库的版本号，每次修改内置题目内容时递增
+const BUILTIN_BANK_VERSION = 2;
+const BUILTIN_VERSION_KEY = 'quiz_builtin_bank_version';
+
 export function initDefaultBank(userId: string) {
   const banks = getBanks(userId);
 
+  // 检查版本号，版本不匹配时强制重新初始化所有内置题库
+  const storedVersion = parseInt(localStorage.getItem(BUILTIN_VERSION_KEY) || '0', 10);
+  const forceReinit = storedVersion < BUILTIN_BANK_VERSION;
+
+  if (forceReinit) {
+    console.log(`[Storage] 内置题库版本 ${storedVersion} → ${BUILTIN_BANK_VERSION}，强制重新初始化`);
+  }
+
   // 电工基础题库
-  if (!banks.find((b: QuestionBank) => b.id === 'bank_electrical')) {
+  const electricalQuestions = [...sampleQuestions, ...extendedQuestions];
+  const existingElectrical = banks.find((b: QuestionBank) => b.id === 'bank_electrical');
+  if (!existingElectrical || forceReinit) {
     saveBank({
       id: 'bank_electrical',
       name: '电工基础题库',
-      description: '电路基础、安全用电、变压器、电动机等核心知识点，共50题',
-      questions: [...sampleQuestions, ...extendedQuestions],
-      createdAt: Date.now(),
+      description: `电路基础、安全用电、变压器、电动机等核心知识点，共${electricalQuestions.length}题`,
+      questions: electricalQuestions,
+      createdAt: existingElectrical?.createdAt || Date.now(),
       updatedAt: Date.now(),
     }, userId);
   }
 
   // 二级计量工程师题库
-  if (!banks.find((b: QuestionBank) => b.id === 'bank_metering')) {
+  const existingMetering = banks.find((b: QuestionBank) => b.id === 'bank_metering');
+  if (!existingMetering || forceReinit) {
     saveBank({
       id: 'bank_metering',
       name: '二级计量工程师题库',
-      description: '2025年考前预测卷，含计量法律法规及综合知识、计量专业实务，共50题',
+      description: `2025年考前预测卷，含计量法律法规及综合知识、计量专业实务，共${meteringQuestions.length}题`,
       questions: meteringQuestions,
-      createdAt: Date.now(),
+      createdAt: existingMetering?.createdAt || Date.now(),
       updatedAt: Date.now(),
     }, userId);
   }
 
-  // 合并题库（兼容旧版本）
-  if (!banks.find((b: QuestionBank) => b.id === 'default')) {
+  // 全部题库
+  const allBuiltinQuestions = [...sampleQuestions, ...extendedQuestions, ...meteringQuestions];
+  const total = allBuiltinQuestions.length;
+  const existingDefault = banks.find((b: QuestionBank) => b.id === 'default');
+  if (!existingDefault || forceReinit) {
     saveBank({
       id: 'default',
       name: '全部题库',
-      description: '电工基础 + 二级计量工程师，共100题',
-      questions: [...sampleQuestions, ...extendedQuestions, ...meteringQuestions],
-      createdAt: Date.now(),
+      description: `电工基础 + 二级计量工程师，共${total}题`,
+      questions: allBuiltinQuestions,
+      createdAt: existingDefault?.createdAt || Date.now(),
       updatedAt: Date.now(),
     }, userId);
+  }
+
+  // 更新版本号
+  if (forceReinit) {
+    localStorage.setItem(BUILTIN_VERSION_KEY, String(BUILTIN_BANK_VERSION));
+    console.log(`[Storage] 内置题库初始化完成：电工${electricalQuestions.length}题，计量${meteringQuestions.length}题，全部${total}题`);
   }
 }
 
