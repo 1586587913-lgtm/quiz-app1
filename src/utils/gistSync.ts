@@ -269,10 +269,20 @@ export async function getGistData(username: string): Promise<any | null> {
     }
 
     const gist = await response.json();
+    console.log('📦 Gist 数据详情:', {
+      gistId: gist.id,
+      filesKeys: Object.keys(gist.files || {}),
+      allFiles: Object.keys(gist.files || {}).map(k => ({
+        filename: k,
+        contentLength: gist.files[k]?.content?.length || 0,
+        contentPreview: gist.files[k]?.content?.substring(0, 100) || 'empty'
+      }))
+    });
+    
     const fileContent = gist.files?.[GIST_FILE_NAME]?.content;
     
     if (!fileContent) {
-      console.log('Gist 中没有数据文件');
+      console.log('Gist 中没有数据文件:', GIST_FILE_NAME);
       return null;
     }
 
