@@ -130,7 +130,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     
     // 保存本地数据到 localStorage（已经是本地数据，无需操作）
     // 直接同步到云端覆盖
-    await syncToGist(pendingUser.id, pendingUser.username);
+    await syncToGist(pendingUser.username);
     
     setShowConflictModal(false);
     setConflictData(undefined);
@@ -144,7 +144,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     if (!pendingUser || !conflictData) return;
     
     // 用云端数据覆盖本地数据
-    localStorage.setItem(`quiz_banks_${pendingUser.id}`, JSON.stringify(conflictData.cloudBanks));
+    localStorage.setItem(`quiz_banks_${pendingUser.username}`, JSON.stringify(conflictData.cloudBanks));
     
     setShowConflictModal(false);
     setConflictData(undefined);
