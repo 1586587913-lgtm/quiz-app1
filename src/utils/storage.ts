@@ -100,11 +100,19 @@ export async function loginWithCloudSync(username: string, password: string): Pr
     }
     console.log('✅ 密码验证成功');
     
-    // 创建本地用户
+    // 创建本地用户（直接保存，不检查本地重复）
     let user = getUsers().find(u => u.username === username);
     if (!user) {
       console.log('创建新本地用户...');
-      user = register(username, password, cloudData.displayName || username);
+      const newUser: User = {
+        id: `u_${Date.now()}`,
+        username,
+        displayName: cloudData.displayName || username,
+        createdAt: Date.now(),
+      };
+      saveUser(newUser);
+      localStorage.setItem(`pwd_${username}`, password);
+      user = newUser;
     }
     
     if (!user) {
