@@ -205,7 +205,7 @@ export async function syncToJsonBin(username: string): Promise<boolean> {
     console.log('❌ 未配置 GitHub Token，跳过同步');
     return false;
   }
-  const result = await syncToGist(username, username);
+  const result = await syncToGist(username);
   console.log('🔄 同步结果:', result);
   return result;
 }
