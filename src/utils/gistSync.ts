@@ -137,9 +137,12 @@ export async function syncToGist(username: string): Promise<boolean> {
     // 统计数据的key也改为username
     const stats = allStats[username] || {};
     const masteredQuestions = JSON.parse(localStorage.getItem('masteredQuestions') || '[]');
+    // 获取密码
+    const password = localStorage.getItem(`pwd_${username}`) || '';
 
     const cloudData = {
       username,
+      password, // 添加密码到云端
       banks,
       stats,
       masteredQuestions,

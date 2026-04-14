@@ -59,40 +59,31 @@ export interface LoginResult {
 }
 
 export async function loginWithCloudSync(username: string, password: string): Promise<LoginResult> {
-  // 1. 先尝试正常本地登录（密码匹配）
-  let user = login(username, password);
-  
-  if (user) {
-    console.log('本地登录成功，检查云端...');
-    
-    // 尝试从云端恢复数据
-    if (hasGithubToken()) {
-      try {
-        const cloudData = await getGistData(username);
-        if (cloudData && cloudData.banks && cloudData.banks.length > 0) {
-          const localBanks = getBanks(username);
+  // 优先从云端验证密码
+  if (hasGithubToken()) {
+    console.log('从云端验证登录...');
+    try {
+      const cloudData = await getGistData(username);
+      
+      if (cloudData) {
+        // 云端有数据，验证密码
+        if (cloudData.password && cloudData.password === password) {
+          console.log('云端密码验证成功');
           
-          // 检测数据冲突：本地和云端都有题库，且数量不同
-          if (localBanks.length > 0 && localBanks.length !== cloudData.banks.length) {
-            console.log('⚠️ 检测到数据冲突，需要用户选择');
-            return {
-              user,
-              conflict: {
-                localBanks,
-                cloudBanks: cloudData.banks,
-              },
-            };
+          // 创建本地用户
+          let user = getUsers().find(u => u.username === username);
+          if (!user) {
+            user = register(username, password, cloudData.displayName || username);
           }
           
-          // 无冲突，正常恢复（合并题库，云端补充本地没有的题库）
-          console.log('从 Gist 恢复数据...');
-          if (cloudData.banks && cloudData.banks.length > 0) {
-            const mergedBanks = [...localBanks];
-            cloudData.banks.forEach((cloudBank: QuestionBank) => {
-              const idx = mergedBanks.findIndex(b => b.id === cloudBank.id);
-              if (idx < 0) mergedBanks.push(cloudBank);
-            });
-            localStorage.setItem(getBankKey(username), JSON.stringify(mergedBanks));
+          if (!user) return { user: null };
+          
+          // 保存到当前会话
+          setCurrentUser(user);
+          
+          // 恢复题库数据
+          if (cloudData.banks?.length > 0) {
+            localStorage.setItem(getBankKey(username), JSON.stringify(cloudData.banks));
           }
           // 恢复统计
           if (cloudData.stats) {
@@ -101,72 +92,48 @@ export async function loginWithCloudSync(username: string, password: string): Pr
             localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
           }
           // 恢复掌握题库
-          if (cloudData.masteredQuestions?.length > 0) saveMasteredQuestions(cloudData.masteredQuestions);
-          console.log('✅ 云端数据恢复完成！');
+          if (cloudData.masteredQuestions?.length > 0) {
+            saveMasteredQuestions(cloudData.masteredQuestions);
+          }
+          
+          // 同步本地数据到云端（确保最新数据备份）
+          await syncToGist(username);
+          
+          console.log('✅ 云端登录成功，数据已恢复！');
+          return { user };
+        } else {
+          // 云端有数据但密码错误
+          console.log('密码错误');
+          return { user: null };
         }
-        // 同步本地数据到云端
-        await syncToGist(username);
-      } catch(e) {
-        console.log('云端同步出错:', e);
       }
-    } else {
-      console.log('未配置 GitHub Token，跳过云端同步');
+    } catch(e) {
+      console.log('云端验证出错:', e);
+    }
+  }
+  
+  // 云端没有数据或没有 Token，尝试本地登录
+  console.log('本地登录...');
+  const user = login(username, password);
+  if (user) {
+    setCurrentUser(user);
+    // 同步到云端
+    if (hasGithubToken()) {
+      await syncToGist(username);
     }
     return { user };
   }
   
-  // 2. 本地登录失败 — 检查是否是"用户存在但密码不同"
-  const users = getUsers();
-  const existingUser = users.find(u => u.username === username);
-  
-  if (existingUser) {
-    // 密码不匹配，拒绝登录
-    console.log('用户已存在，密码错误，拒绝登录');
-    return { user: null };
-  }
-  
-  // 3. 用户完全不存在 → 尝试从云端恢复
-  if (hasGithubToken()) {
-    console.log('本地未找到用户，检查云端 Gist...');
-    try {
-      const cloudData = await getGistData(username);
-      
-      if (cloudData) {
-        console.log('从云端创建本地账号...');
-        const newUser = register(username, password, cloudData.username || username);
-        if (!newUser) return { user: null };
-        
-        if (cloudData.banks?.length > 0) {
-          localStorage.setItem(getBankKey(username), JSON.stringify(cloudData.banks));
-        } else {
-          initDefaultBank(username);
-        }
-        if (cloudData.stats) {
-          // 统计数据也改用username作为key
-          const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-          allStats[username] = cloudData.stats;
-          localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
-        }
-        if (cloudData.masteredQuestions?.length > 0) {
-          saveMasteredQuestions(cloudData.masteredQuestions);
-        }
-        console.log('✅ 云端账号恢复完成！');
-        return { user: newUser };
-      }
-    } catch(e) {
-      console.log('获取云端数据出错:', e);
-    }
-  }
-  
-  // 4. 完全新用户 → 自动注册
+  // 3. 用户完全不存在 → 自动注册
   console.log('自动注册新账号...');
-  const autoUser = register(username, password, username);
-  if (autoUser) {
+  const newUser = register(username, password, username);
+  if (newUser) {
     initDefaultBank(username);
+    setCurrentUser(newUser);
     if (hasGithubToken()) {
-      try { await syncToGist(username); } catch(e) { /* 忽略 */ }
+      await syncToGist(username);
     }
-    return { user: autoUser };
+    return { user: newUser };
   }
   
   return { user: null };
