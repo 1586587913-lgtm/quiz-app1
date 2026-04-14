@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import type { Question, User, AppPage } from '../types';
 import { getBanks, getMasteredQuestions, addMasteredQuestion, removeMasteredQuestion, isMastered } from '../utils/storage';
 import { allQuestions } from '../data/questions';
@@ -21,7 +21,7 @@ export default function ReviewMode({ user, onNavigate, bankId }: ReviewModeProps
   const [masteredIds, setMasteredIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const banks = getBanks(user.id);
+    const banks = getBanks(user.username);
     let allQuestionsPool: Question[] = [];
     
     // 处理内置题库选择
@@ -332,3 +332,4 @@ function Header({ onBack }: { onBack: () => void }) {
     </header>
   );
 }
+

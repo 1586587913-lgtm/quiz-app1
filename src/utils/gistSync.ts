@@ -114,9 +114,9 @@ async function findUserGist(username: string, token: string): Promise<string | n
 }
 
 /**
- * 同步用户数据到云端
+ * 同步用户数据到云端（改用username作为key，确保同一账号数据一致）
  */
-export async function syncToGist(userId: string, username: string): Promise<boolean> {
+export async function syncToGist(username: string): Promise<boolean> {
   const token = getToken();
   if (!token) {
     console.log('未配置 GitHub Token');
@@ -124,21 +124,38 @@ export async function syncToGist(userId: string, username: string): Promise<bool
   }
 
   try {
-    // 收集本地数据
-    const banks = JSON.parse(localStorage.getItem(`quiz_banks_${userId}`) || '[]');
+    // 收集本地数据（用username作为key）
+    const bankKey = `quiz_banks_${username}`;
+    const bankData = localStorage.getItem(bankKey);
+    console.log('📦 原始数据检查:', {
+      bankKey,
+      bankDataLength: bankData?.length || 0,
+    });
+    
+    const banks = JSON.parse(bankData || '[]');
     const allStats = JSON.parse(localStorage.getItem('quiz_stats') || '{}');
-    const stats = allStats[userId] || {};
+    // 统计数据的key也改为username
+    const stats = allStats[username] || {};
     const masteredQuestions = JSON.parse(localStorage.getItem('masteredQuestions') || '[]');
 
     const cloudData = {
       username,
-      userId,
       banks,
       stats,
       masteredQuestions,
       wrongQuestions: stats.wrongQuestions || [],
       lastSync: Date.now(),
     };
+
+    // 调试日志
+    console.log('🔄 同步数据详情:', {
+      username,
+      banksCount: banks.length,
+      banksDataLength: JSON.stringify(banks).length,
+      statsKeys: Object.keys(stats),
+      masteredCount: masteredQuestions.length,
+      cloudDataSize: JSON.stringify(cloudData).length,
+    });
 
     const jsonData = JSON.stringify(cloudData, null, 2);
 

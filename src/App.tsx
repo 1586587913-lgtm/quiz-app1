@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import type { User, AppPage } from './types';
 import type { Question } from './types';
 import { getCurrentUser, setCurrentUser, initDefaultBank } from './utils/storage';
@@ -20,7 +20,7 @@ export default function App() {
   useEffect(() => {
     const user = getCurrentUser();
     if (user) {
-      initDefaultBank(user.id); // 初始化当前用户的题库
+      initDefaultBank(user.username); // 初始化当前用户的题库
       setUser(user);
       setCurrentPage('home');
     }
@@ -28,7 +28,7 @@ export default function App() {
   }, []);
 
   const handleLogin = (user: User) => {
-    initDefaultBank(user.id); // 初始化新登录用户的题库
+    initDefaultBank(user.username); // 初始化新登录用户的题库
     setUser(user);
     setCurrentPage('home');
   };
@@ -124,3 +124,4 @@ export default function App() {
   // 默认回首页
   return <HomePage user={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 }
+

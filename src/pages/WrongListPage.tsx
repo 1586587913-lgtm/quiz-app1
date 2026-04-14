@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import type { User, AppPage } from '../types';
 import type { Question } from '../types';
 import { getStats, removeWrongQuestion, removeWrongQuestions, clearAllWrongQuestions } from '../utils/storage';
@@ -16,8 +16,8 @@ export default function WrongListPage({ user, onNavigate, onPracticeWrong }: Wro
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const loadWrongQuestions = () => {
-    const stats = getStats(user.id);
-    const banks = getBanks(user.id);
+    const stats = getStats(user.username);
+    const banks = getBanks(user.username);
     const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
     const merged = [...bankQuestions, ...allQuestions];
     const seen = new Set<string>();
@@ -206,3 +206,4 @@ export default function WrongListPage({ user, onNavigate, onPracticeWrong }: Wro
     </div>
   );
 }
+

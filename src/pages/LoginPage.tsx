@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync } from '../utils/storage';
+import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync, type LoginResult, type QuestionBank } from '../utils/storage';
 import { 
   setGithubToken as saveGithubToken, 
   hasGithubToken,
-  validateGithubToken 
+  validateGithubToken,
+  syncToGist
 } from '../utils/gistSync';
 import type { User } from '../types';
 
@@ -19,6 +20,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [tokenMsg, setTokenMsg] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // 数据冲突状态
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [conflictData, setConflictData] = useState<LoginResult['conflict']>(undefined);
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
   
   // 初始化时检查已有的 GitHub Token
   useEffect(() => {
@@ -92,20 +98,59 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        const user = await loginWithCloudSync(form.username, form.password);
-        if (!user) {
+        const result = await loginWithCloudSync(form.username, form.password);
+        if (!result.user) {
           setError('用户名或密码错误');
           setLoading(false);
           return;
         }
-        setCurrentUser(user);
-        onLogin(user);
+        
+        // 检查是否有数据冲突
+        if (result.conflict) {
+          setConflictData(result.conflict);
+          setPendingUser(result.user);
+          setShowConflictModal(true);
+          setLoading(false);
+          return;
+        }
+        
+        setCurrentUser(result.user);
+        onLogin(result.user);
       }
     } catch (err) {
       setError('网络异常，请检查网络连接');
     } finally {
       setLoading(false);
     }
+  };
+
+  // 处理数据冲突 - 使用本地数据
+  const handleKeepLocalData = async () => {
+    if (!pendingUser || !conflictData) return;
+    
+    // 保存本地数据到 localStorage（已经是本地数据，无需操作）
+    // 直接同步到云端覆盖
+    await syncToGist(pendingUser.id, pendingUser.username);
+    
+    setShowConflictModal(false);
+    setConflictData(undefined);
+    setPendingUser(null);
+    setCurrentUser(pendingUser);
+    onLogin(pendingUser);
+  };
+
+  // 处理数据冲突 - 使用云端数据
+  const handleKeepCloudData = async () => {
+    if (!pendingUser || !conflictData) return;
+    
+    // 用云端数据覆盖本地数据
+    localStorage.setItem(`quiz_banks_${pendingUser.id}`, JSON.stringify(conflictData.cloudBanks));
+    
+    setShowConflictModal(false);
+    setConflictData(undefined);
+    setPendingUser(null);
+    setCurrentUser(pendingUser);
+    onLogin(pendingUser);
   };
 
   // 快速体验（游客登录）
@@ -120,7 +165,64 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     onLogin(guestUser);
   };
 
+  // 计算本地和云端的题目总数
+  const localTotal = conflictData?.localBanks.reduce((sum, b) => sum + (b.questions?.length || 0), 0) || 0;
+  const cloudTotal = conflictData?.cloudBanks.reduce((sum, b) => sum + (b.questions?.length || 0), 0) || 0;
+
   return (
+    <>
+      {/* 数据冲突弹窗 */}
+      {showConflictModal && conflictData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">
+              ⚠️ 检测到数据冲突
+            </h3>
+            <p className="text-gray-600 text-sm mb-4 text-center">
+              本地和云端都有题库数据，请选择保留哪个
+            </p>
+            
+            <div className="space-y-3 mb-6">
+              {/* 本地数据 */}
+              <div 
+                className="p-4 border-2 border-blue-200 rounded-xl hover:border-blue-400 cursor-pointer transition-all"
+                onClick={handleKeepLocalData}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-blue-800">💻 保留本地数据</span>
+                  <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                    {localTotal} 题
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {conflictData.localBanks.length} 个题库 · 来自当前设备
+                </p>
+              </div>
+              
+              {/* 云端数据 */}
+              <div 
+                className="p-4 border-2 border-green-200 rounded-xl hover:border-green-400 cursor-pointer transition-all"
+                onClick={handleKeepCloudData}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-green-800">☁️ 保留云端数据</span>
+                  <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded">
+                    {cloudTotal} 题
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {conflictData.cloudBanks.length} 个题库 · 来自服务器
+                </p>
+              </div>
+            </div>
+            
+            <p className="text-xs text-gray-400 text-center">
+              选择后会自动同步到云端
+            </p>
+          </div>
+        </div>
+      )}
+
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3730a3 40%, #4c1d95 100%)' }}>
       {/* 背景装饰 */}
@@ -332,5 +434,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </p>
       </div>
     </div>
+    </>
   );
 }

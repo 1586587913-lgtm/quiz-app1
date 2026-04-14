@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import type { User, AppPage, QuestionBank, Question } from '../types';
 import { getBanks, saveBank, deleteBank, getStats, getFlaggedQuestions, removeFlaggedQuestion, FlaggedQuestion, downloadExportData, importUserData } from '../utils/storage';
 import { allQuestions } from '../data/questions';
@@ -217,16 +217,16 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
   };
 
   useEffect(() => {
-    setBanks(getBanks(user.id));
-    setStats(getStats(user.id));
+    setBanks(getBanks(user.username));
+    setStats(getStats(user.username));
   }, [user.id]);
 
   // 监听页面可见性变化，从练题/背题页面返回时刷新统计数据
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        setBanks(getBanks(user.id));
-        setStats(getStats(user.id));
+        setBanks(getBanks(user.username));
+        setStats(getStats(user.username));
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -252,8 +252,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
 
   const handleDeleteBank = (id: string) => {
     if (id === 'default' || id === 'bank_electrical' || id === 'bank_metering') return;
-    deleteBank(id, user.id);
-    setBanks(getBanks(user.id));
+    deleteBank(id, user.username);
+    setBanks(getBanks(user.username));
   };
 
   const handleEditBank = (bank: QuestionBank) => {
@@ -271,8 +271,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       description: newBankDesc,
       updatedAt: Date.now(),
     };
-    saveBank(updatedBank, user.id);
-    setBanks(getBanks(user.id));
+    saveBank(updatedBank, user.username);
+    setBanks(getBanks(user.username));
     setShowEditBank(false);
     setEditingBank(null);
     setNewBankName('');
@@ -335,8 +335,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
     }
     updatedBank.updatedAt = Date.now();
 
-    saveBank(updatedBank, user.id);
-    setBanks(getBanks(user.id));
+    saveBank(updatedBank, user.username);
+    setBanks(getBanks(user.username));
     setShowQuestionEditor(false);
     setEditingQuestion(null);
     setEditingQuestionIndex(-1);
@@ -349,8 +349,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       questions: bank.questions.filter((_, i) => i !== index),
       updatedAt: Date.now(),
     };
-    saveBank(updatedBank, user.id);
-    setBanks(getBanks(user.id));
+    saveBank(updatedBank, user.username);
+    setBanks(getBanks(user.username));
     // 更新当前编辑的题库状态
     if (editingBank?.id === bank.id) {
       setEditingBank(updatedBank);
@@ -411,8 +411,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       questions: updatedQuestions,
       updatedAt: Date.now(),
     };
-    saveBank(updatedBank, user.id);
-    setBanks(getBanks(user.id));
+    saveBank(updatedBank, user.username);
+    setBanks(getBanks(user.username));
     setEditingBank(updatedBank);
     setSelectedQuestions([]);
     setShowBatchDelete(false);
@@ -435,8 +435,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    saveBank(bank, user.id);
-    setBanks(getBanks(user.id));
+    saveBank(bank, user.username);
+    setBanks(getBanks(user.username));
     setNewBankName('');
     setNewBankDesc('');
     setShowAddBank(false);
@@ -456,8 +456,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        saveBank(bank, user.id);
-        setBanks(getBanks(user.id));
+        saveBank(bank, user.username);
+        setBanks(getBanks(user.username));
         setImportText('');
         setShowImportBank(false);
       } else if (data.questions && Array.isArray(data.questions)) {
@@ -467,8 +467,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        saveBank(bank, user.id);
-        setBanks(getBanks(user.id));
+        saveBank(bank, user.username);
+        setBanks(getBanks(user.username));
         setImportText('');
         setShowImportBank(false);
       } else {
@@ -577,8 +577,8 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       };
     }
 
-    saveBank(targetBank, user.id);
-    setBanks(getBanks(user.id));
+    saveBank(targetBank, user.username);
+    setBanks(getBanks(user.username));
     setShowFileImport(false);
     setImportedQuestions([]);
     setDuplicateInfo(null);
@@ -1048,12 +1048,12 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
                                           return b;
                                         });
                                         // 保存更新后的题库
-                                        updatedBanks.forEach(b => saveBank(b, user.id));
+                                        updatedBanks.forEach(b => saveBank(b, user.username));
                                         // 移除标记
                                         removeFlaggedQuestion(flag.questionId);
                                         setFlaggedQuestions(flaggedQuestions.filter(f => f.questionId !== flag.questionId));
                                         // 刷新题库列表
-                                        setBanks(getBanks(user.id));
+                                        setBanks(getBanks(user.username));
                                       }
                                     }}
                                     className="text-gray-400 hover:text-red-500 px-2 py-1 text-xs"
@@ -1962,3 +1962,4 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
     </div>
   );
 }
+

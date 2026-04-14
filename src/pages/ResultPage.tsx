@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import type { ExamSession, User, AppPage } from '../types';
 import { getSession } from '../utils/storage';
 import { allQuestions } from '../data/questions';
@@ -20,7 +20,7 @@ export default function ResultPage({ user, sessionId, onNavigate, onPracticeWron
   useEffect(() => {
     const sess = getSession(sessionId);
     setSession(sess);
-    const banks = getBanks(user.id);
+    const banks = getBanks(user.username);
     const bankQuestions = banks.reduce<Question[]>((acc, b) => [...acc, ...(b.questions || [])], []);
     const merged = [...bankQuestions, ...allQuestions];
     const seen = new Set<string>();
@@ -211,3 +211,4 @@ export default function ResultPage({ user, sessionId, onNavigate, onPracticeWron
     </div>
   );
 }
+

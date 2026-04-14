@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import type { Question, ExamSession, AnswerRecord, User } from '../types';
 import type { AppPage } from '../types';
 import { genId, checkAnswer, calculateScore, formatTime } from '../utils/helpers';
@@ -47,7 +47,7 @@ export default function PracticeMode({ user, onNavigate, questionsOverride, mode
     if (questionsOverride) {
       qs = questionsOverride;
     } else {
-      const banks = getBanks(user.id);
+      const banks = getBanks(user.username);
       console.log('[练题] bankId:', bankId);
       console.log('[练题] 可用题库:', banks.map(b => ({ id: b.id, name: b.name, count: b.questions?.length || 0 })));
       
@@ -850,3 +850,4 @@ function QuestionCard({
     </div>
   );
 }
+
