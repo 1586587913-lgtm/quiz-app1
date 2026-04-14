@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync, type LoginResult, type QuestionBank } from '../utils/storage';
+import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync, type LoginResult, type QuestionBank, syncToGist } from '../utils/storage';
 import { 
   setGithubToken as saveGithubToken, 
   hasGithubToken,

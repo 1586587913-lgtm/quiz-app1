@@ -8,6 +8,9 @@ import {
   validateGithubToken
 } from './gistSync';
 
+// 重新导出供其他模块使用
+export { syncToGist };
+
 const KEYS = {
   users: 'quiz_users',
   currentUser: 'quiz_current_user',
