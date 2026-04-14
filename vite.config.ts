@@ -4,8 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig(() => {
-  // GitHub Actions 使用绝对路径
-  const base = './';
+  // GitHub Pages 使用 /quiz-app1/ 路径
+  const base = '/quiz-app1/';
   
   return {
     base,
