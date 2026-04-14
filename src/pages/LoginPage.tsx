@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync, type LoginResult, type QuestionBank, syncToGist } from '../utils/storage';
+import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync, type LoginResult, syncToGist } from '../utils/storage';
 import { 
   setGithubToken as saveGithubToken, 
   hasGithubToken,
   validateGithubToken
 } from '../utils/gistSync';
-import type { User } from '../types';
+import type { User, QuestionBank } from '../types';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
