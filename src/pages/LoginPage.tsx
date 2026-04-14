@@ -82,14 +82,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         
-        const user = await registerWithCloudSync(form.username, form.password, form.displayName);
-        if (!user) {
-          setError('注册失败，请稍后重试');
+        const result = await registerWithCloudSync(form.username, form.password, form.displayName);
+        if (!result.user) {
+          setError(result.error || '注册失败，请稍后重试');
           setLoading(false);
           return;
         }
-        setCurrentUser(user);
-        onLogin(user);
+        setCurrentUser(result.user);
+        onLogin(result.user);
       } else {
         if (!form.username || !form.password) {
           setError('请输入用户名和密码');

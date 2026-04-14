@@ -58,97 +58,132 @@ export interface LoginResult {
   };
 }
 
+// 检查云端用户名是否已存在
+export async function checkCloudUsernameExists(username: string): Promise<boolean> {
+  if (!hasGithubToken()) return false;
+  try {
+    const data = await getGistData(username);
+    return data !== null;
+  } catch {
+    return false;
+  }
+}
+
 export async function loginWithCloudSync(username: string, password: string): Promise<LoginResult> {
-  // 优先从云端验证密码
-  if (hasGithubToken()) {
-    console.log('从云端验证登录...');
-    try {
-      const cloudData = await getGistData(username);
-      
-      if (cloudData) {
-        // 云端有数据，验证密码
-        if (cloudData.password && cloudData.password === password) {
-          console.log('云端密码验证成功');
-          
-          // 创建本地用户
-          let user = getUsers().find(u => u.username === username);
-          if (!user) {
-            user = register(username, password, cloudData.displayName || username);
-          }
-          
-          if (!user) return { user: null };
-          
-          // 保存到当前会话
-          setCurrentUser(user);
-          
-          // 恢复题库数据
-          if (cloudData.banks?.length > 0) {
-            localStorage.setItem(getBankKey(username), JSON.stringify(cloudData.banks));
-          }
-          // 恢复统计
-          if (cloudData.stats) {
-            const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-            allStats[username] = cloudData.stats;
-            localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
-          }
-          // 恢复掌握题库
-          if (cloudData.masteredQuestions?.length > 0) {
-            saveMasteredQuestions(cloudData.masteredQuestions);
-          }
-          
-          // 同步本地数据到云端（确保最新数据备份）
-          await syncToGist(username);
-          
-          console.log('✅ 云端登录成功，数据已恢复！');
-          return { user };
-        } else {
-          // 云端有数据但密码错误
-          console.log('密码错误');
-          return { user: null };
-        }
-      }
-    } catch(e) {
-      console.log('云端验证出错:', e);
-    }
+  console.log('=== 开始登录流程 ===');
+  console.log('用户名:', username);
+  console.log('是否有 GitHub Token:', hasGithubToken());
+  
+  // 登录必须从云端验证
+  if (!hasGithubToken()) {
+    console.log('❌ 没有 GitHub Token，无法登录');
+    console.log('请先输入 GitHub Token 并验证');
+    return { user: null };
   }
   
-  // 云端没有数据或没有 Token，尝试本地登录
-  console.log('本地登录...');
-  const user = login(username, password);
-  if (user) {
+  console.log('从云端验证登录...');
+  try {
+    const cloudData = await getGistData(username);
+    
+    if (!cloudData) {
+      console.log('❌ 云端没有该用户数据');
+      console.log('请先注册账号');
+      return { user: null };
+    }
+    
+    console.log('云端找到用户数据，验证密码...');
+    
+    // 验证密码
+    if (cloudData.password !== password) {
+      console.log('❌ 密码错误');
+      return { user: null };
+    }
+    console.log('✅ 密码验证成功');
+    
+    // 创建本地用户
+    let user = getUsers().find(u => u.username === username);
+    if (!user) {
+      console.log('创建新本地用户...');
+      user = register(username, password, cloudData.displayName || username);
+    }
+    
+    if (!user) {
+      console.log('创建用户失败');
+      return { user: null };
+    }
+    
+    // 保存到当前会话
     setCurrentUser(user);
-    // 同步到云端
-    if (hasGithubToken()) {
-      await syncToGist(username);
+    
+    // 恢复题库数据
+    if (cloudData.banks?.length > 0) {
+      localStorage.setItem(getBankKey(username), JSON.stringify(cloudData.banks));
+      console.log('恢复题库:', cloudData.banks.length, '个');
     }
+    // 恢复统计
+    if (cloudData.stats) {
+      const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
+      allStats[username] = cloudData.stats;
+      localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
+    }
+    // 恢复掌握题库
+    if (cloudData.masteredQuestions?.length > 0) {
+      saveMasteredQuestions(cloudData.masteredQuestions);
+    }
+    
+    // 同步本地数据到云端
+    await syncToGist(username);
+    
+    console.log('✅ 云端登录成功，数据已恢复！');
     return { user };
+  } catch(e) {
+    console.log('云端验证出错:', e);
+    return { user: null };
+  }
+}
+
+// 检查云端用户名是否存在
+export async function checkUsernameAvailable(username: string): Promise<{ available: boolean; message: string }> {
+  if (!hasGithubToken()) {
+    // 没有Token时，允许本地注册
+    return { available: true, message: '' };
   }
   
-  // 3. 用户完全不存在 → 自动注册
-  console.log('自动注册新账号...');
-  const newUser = register(username, password, username);
-  if (newUser) {
-    initDefaultBank(username);
-    setCurrentUser(newUser);
-    if (hasGithubToken()) {
-      await syncToGist(username);
+  try {
+    const exists = await checkCloudUsernameExists(username);
+    if (exists) {
+      return { available: false, message: '该用户名已被注册，请使用其他用户名或直接登录' };
     }
-    return { user: newUser };
+    return { available: true, message: '' };
+  } catch (e) {
+    console.log('检查用户名出错:', e);
+    return { available: true, message: '' };
   }
-  
-  return { user: null };
 }
 
 // 注册时同步到 Gist
-export async function registerWithCloudSync(username: string, password: string, displayName: string): Promise<User | null> {
-  // 先本地注册
+export async function registerWithCloudSync(username: string, password: string, displayName: string): Promise<{ user: User | null; error?: string }> {
+  // 先检查云端是否已有该用户名
+  if (hasGithubToken()) {
+    try {
+      const exists = await checkCloudUsernameExists(username);
+      if (exists) {
+        console.log('❌ 云端已存在该用户');
+        return { user: null, error: '该用户名已被注册，请直接登录' };
+      }
+    } catch (e) {
+      console.log('检查云端用户失败，继续注册:', e);
+    }
+  }
+  
+  // 注册到本地
   const user = register(username, password, displayName);
-  if (!user) return null;
+  if (!user) return { user: null, error: '注册失败' };
 
   // 初始化内置题库（用username作为key）
   initDefaultBank(username);
 
-  // 尝试同步到 Gist
+  // 同步到 Gist
   if (hasGithubToken()) {
     try {
       const result = await syncToGist(username);
@@ -160,7 +195,7 @@ export async function registerWithCloudSync(username: string, password: string, 
     console.log('注册成功（未配置 Token，数据仅保存在本地）');
   }
 
-  return user;
+  return { user };
 }
 
 // 同步到 Gist（公开函数供其他模块调用）
