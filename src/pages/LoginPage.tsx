@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync, type LoginResult, syncToGist } from '../utils/storage';
+import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudSync, getCloudUserInfo, resetCloudPassword, type LoginResult, syncToGist } from '../utils/storage';
 import { 
   setGithubToken as saveGithubToken, 
   hasGithubToken,
@@ -19,6 +19,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [tokenMsg, setTokenMsg] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // 忘记密码状态
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotStep, setForgotStep] = useState<'input' | 'verify' | 'reset'>('input');
+  const [forgotUsername, setForgotUsername] = useState('');
+  const [forgotDisplayName, setForgotDisplayName] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPwd, setForgotConfirmPwd] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
   
   // 数据冲突状态
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -164,12 +175,229 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     onLogin(guestUser);
   };
 
+  // 忘记密码 - 第一步：输入用户名
+  const handleForgotUsername = async () => {
+    if (!forgotUsername.trim()) {
+      setForgotError('请输入用户名');
+      return;
+    }
+    if (!hasGithubToken()) {
+      setForgotError('请先配置 GitHub Token');
+      return;
+    }
+    
+    setForgotLoading(true);
+    setForgotError('');
+    
+    try {
+      const info = await getCloudUserInfo(forgotUsername.trim());
+      if (info.exists) {
+        setForgotDisplayName(info.displayName || '');
+        setForgotStep('verify');
+      } else {
+        setForgotError('该用户不存在，请先注册');
+      }
+    } catch {
+      setForgotError('网络异常，请检查网络连接');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // 忘记密码 - 第二步：验证显示名称
+  const handleVerifyDisplayName = () => {
+    if (forgotDisplayName !== forgotDisplayName) {
+      setForgotError('显示名称不正确');
+      return;
+    }
+    setForgotStep('reset');
+    setForgotError('');
+  };
+
+  // 忘记密码 - 第三步：重置密码
+  const handleResetPassword = async () => {
+    if (!forgotNewPassword || forgotNewPassword.length < 4) {
+      setForgotError('密码至少4位');
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirmPwd) {
+      setForgotError('两次密码不一致');
+      return;
+    }
+    
+    setForgotLoading(true);
+    setForgotError('');
+    
+    try {
+      const success = await resetCloudPassword(forgotUsername.trim(), forgotNewPassword);
+      if (success) {
+        setForgotSuccess(true);
+      } else {
+        setForgotError('重置失败，请稍后重试');
+      }
+    } catch {
+      setForgotError('网络异常，请检查网络连接');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // 打开忘记密码弹窗
+  const openForgotModal = () => {
+    setShowForgotModal(true);
+    setForgotStep('input');
+    setForgotUsername('');
+    setForgotDisplayName('');
+    setForgotNewPassword('');
+    setForgotConfirmPwd('');
+    setForgotError('');
+    setForgotSuccess(false);
+  };
+
   // 计算本地和云端的题目总数
   const localTotal = conflictData?.localBanks.reduce((sum, b) => sum + (b.questions?.length || 0), 0) || 0;
   const cloudTotal = conflictData?.cloudBanks.reduce((sum, b) => sum + (b.questions?.length || 0), 0) || 0;
 
   return (
     <>
+      {/* 忘记密码弹窗 */}
+      {showForgotModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-800">
+                {forgotSuccess ? '✅ 密码重置成功' : '🔑 忘记密码'}
+              </h3>
+              <button 
+                onClick={() => setShowForgotModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            
+            {forgotSuccess ? (
+              <div className="text-center py-4">
+                <p className="text-gray-600 mb-4">密码已重置成功，请使用新密码登录</p>
+                <button
+                  onClick={() => {
+                    setShowForgotModal(false);
+                    setForm(f => ({ ...f, username: forgotUsername, password: '' }));
+                    setIsRegister(false);
+                  }}
+                  className="btn btn-primary px-6"
+                >
+                  去登录
+                </button>
+              </div>
+            ) : forgotStep === 'input' ? (
+              <>
+                <p className="text-gray-600 text-sm mb-4">
+                  请输入你要找回密码的用户名
+                </p>
+                <div className="space-y-3">
+                  <input
+                    className="input"
+                    placeholder="请输入用户名"
+                    value={forgotUsername}
+                    onChange={e => setForgotUsername(e.target.value)}
+                    autoFocus
+                  />
+                  {forgotError && (
+                    <p className="text-red-500 text-sm">{forgotError}</p>
+                  )}
+                  <button
+                    onClick={handleForgotUsername}
+                    disabled={forgotLoading}
+                    className="btn btn-primary w-full"
+                  >
+                    {forgotLoading ? '查询中...' : '下一步'}
+                  </button>
+                </div>
+              </>
+            ) : forgotStep === 'verify' ? (
+              <>
+                <p className="text-gray-600 text-sm mb-2">
+                  已找到用户 <strong>{forgotUsername}</strong>
+                </p>
+                <p className="text-gray-600 text-sm mb-4">
+                  为验证身份，请输入注册时设置的<strong>显示昵称</strong>
+                </p>
+                <div className="space-y-3">
+                  <input
+                    className="input"
+                    placeholder="请输入显示昵称"
+                    value={forgotDisplayName}
+                    onChange={e => setForgotDisplayName(e.target.value)}
+                    autoFocus
+                  />
+                  {forgotError && (
+                    <p className="text-red-500 text-sm">{forgotError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setForgotStep('input')}
+                      className="btn btn-secondary flex-1"
+                    >
+                      上一步
+                    </button>
+                    <button
+                      onClick={handleVerifyDisplayName}
+                      className="btn btn-primary flex-1"
+                    >
+                      验证
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-600 text-sm mb-4">
+                  身份验证通过，请设置新密码
+                </p>
+                <div className="space-y-3">
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder="新密码（至少4位）"
+                    value={forgotNewPassword}
+                    onChange={e => setForgotNewPassword(e.target.value)}
+                    autoFocus
+                  />
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder="确认新密码"
+                    value={forgotConfirmPwd}
+                    onChange={e => setForgotConfirmPwd(e.target.value)}
+                  />
+                  {forgotError && (
+                    <p className="text-red-500 text-sm">{forgotError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setForgotStep('verify')}
+                      className="btn btn-secondary flex-1"
+                    >
+                      上一步
+                    </button>
+                    <button
+                      onClick={handleResetPassword}
+                      disabled={forgotLoading}
+                      className="btn btn-primary flex-1"
+                    >
+                      {forgotLoading ? '重置中...' : '确认重置'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 数据冲突弹窗 */}
       {showConflictModal && conflictData && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -342,6 +570,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 autoComplete={isRegister ? 'new-password' : 'current-password'}
                 onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
               />
+              {!isRegister && (
+                <button
+                  type="button"
+                  onClick={openForgotModal}
+                  className="text-xs text-blue-500 hover:text-blue-600 mt-1"
+                >
+                  忘记密码？
+                </button>
+              )}
             </div>
             {isRegister && (
               <div>

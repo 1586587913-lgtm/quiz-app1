@@ -218,6 +218,65 @@ export async function syncToJsonBin(username: string): Promise<boolean> {
   return result;
 }
 
+// 获取云端用户信息（用于忘记密码验证）
+export async function getCloudUserInfo(username: string): Promise<{ exists: boolean; displayName?: string }> {
+  if (!hasGithubToken()) {
+    return { exists: false };
+  }
+  try {
+    const cloudData = await getGistData(username);
+    if (cloudData && cloudData.username === username) {
+      return { exists: true, displayName: cloudData.displayName };
+    }
+    return { exists: false };
+  } catch {
+    return { exists: false };
+  }
+}
+
+// 重置云端密码
+export async function resetCloudPassword(username: string, newPassword: string): Promise<boolean> {
+  if (!hasGithubToken()) {
+    return false;
+  }
+  try {
+    const cloudData = await getGistData(username);
+    if (!cloudData || cloudData.username !== username) {
+      return false;
+    }
+    // 更新密码
+    cloudData.password = newPassword;
+    // 保存回 Gist
+    const token = localStorage.getItem('github_token');
+    const gistId = cloudData.gistId;
+    const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        description: `quiz_app_user_${username}`,
+        files: {
+          'data.json': {
+            content: JSON.stringify(cloudData, null, 2),
+          },
+        },
+      }),
+    });
+    if (response.ok) {
+      // 同时更新本地密码
+      localStorage.setItem(`pwd_${username}`, newPassword);
+      console.log('✅ 云端密码重置成功');
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error('重置密码失败:', e);
+    return false;
+  }
+}
+
 // 兼容旧函数名
 export async function syncToCloud(userId: string, username: string, _password?: string): Promise<boolean> {
   return syncToGist(username);
