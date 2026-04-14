@@ -3,8 +3,7 @@ import { register, login, setCurrentUser, loginWithCloudSync, registerWithCloudS
 import { 
   setGithubToken as saveGithubToken, 
   hasGithubToken,
-  validateGithubToken,
-  syncToGist
+  validateGithubToken
 } from '../utils/gistSync';
 import type { User } from '../types';
 
