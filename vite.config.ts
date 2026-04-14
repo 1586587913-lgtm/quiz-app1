@@ -3,14 +3,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-export default defineConfig(({ command, isSsrBuild }) => {
+export default defineConfig(() => {
   // GitHub Actions 使用绝对路径
-  // 通过检测命令行参数判断是否在 CI 环境
-  const isCI = process.env.GITHUB_ACTIONS === 'true' || 
-               process.env.CI === 'true' ||
-               process.argv.includes('--ci') ||
-               process.cwd().includes('github');
-  const base = isCI ? '/quiz-app1/' : './';
+  const base = './';
   
   return {
     base,
