@@ -123,9 +123,28 @@ export async function loginWithCloudSync(username: string, password: string): Pr
     localStorage.setItem(`pwd_${username}`, password);
     setCurrentUser(existingUser);
     
-    // 同步云端
+    // 无论密码是否相同，都尝试从云端恢复数据
     if (hasGithubToken()) {
-      try { await syncToGist(username); } catch(e) { /* 忽略 */ }
+      try {
+        const cloudData = await getGistData(username);
+        if (cloudData && cloudData.banks && cloudData.banks.length > 0) {
+          console.log('从云端恢复题库数据...');
+          localStorage.setItem(getBankKey(username), JSON.stringify(cloudData.banks));
+          if (cloudData.stats) {
+            const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
+            allStats[username] = cloudData.stats;
+            localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
+          }
+          if (cloudData.masteredQuestions?.length > 0) {
+            saveMasteredQuestions(cloudData.masteredQuestions);
+          }
+          console.log('✅ 云端数据恢复完成！');
+        }
+        // 同步本地数据到云端
+        await syncToGist(username);
+      } catch(e) {
+        console.log('云端同步出错:', e);
+      }
     }
     return { user: existingUser };
   }
