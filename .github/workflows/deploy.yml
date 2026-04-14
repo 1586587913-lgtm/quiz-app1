@@ -31,10 +31,7 @@ jobs:
         run: npm ci
       
       - name: Build
-        run: |
-          # 替换 vite.config.ts 中的 base 为仓库路径
-          sed -i "s|const base = './';|const base = '/quiz-app1/';|" vite.config.ts
-          npm run build
+        run: npm run build
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
