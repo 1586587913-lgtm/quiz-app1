@@ -1216,16 +1216,16 @@ export interface DuplicateCheckResult {
 /**
  * 检查重复题目
  * @param questions 待导入的题目
- * @param userId 用户ID
+ * @param username 用户名
  * @param similarityThreshold 相似度阈值（默认 0.85）
  */
 export function checkDuplicates(
   questions: Partial<Question>[],
-  userId: string,
+  username: string,
   similarityThreshold: number = 0.85
 ): DuplicateCheckResult {
   // 获取所有题库的已有题目
-  const banks = getBanks(userId);
+  const banks = getBanks(username);
   const originalQuestions = banks.flatMap(b => b.questions);
   
   const newQuestions: Partial<Question>[] = [];

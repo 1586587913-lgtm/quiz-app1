@@ -517,7 +517,7 @@ export default function HomePage({ user, onNavigate, onLogout }: HomePageProps) 
       setImportProgress(`识别到 ${questions.length} 道题目，正在查重...`);
       
       // 查重
-      const duplicateResult = checkDuplicates(questions, user.id);
+      const duplicateResult = checkDuplicates(questions, user.username);
       // 100%相似自动跳过，低于100%让用户选择
       const duplicatesWithSelection = duplicateResult.duplicates.map(d => ({
         ...d,
