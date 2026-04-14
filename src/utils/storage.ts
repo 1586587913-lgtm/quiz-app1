@@ -212,13 +212,13 @@ export async function syncToJsonBin(username: string): Promise<boolean> {
 
 // 兼容旧函数名
 export async function syncToCloud(userId: string, username: string, _password?: string): Promise<boolean> {
-  return syncToJsonBin(username);
+  return syncToGist(username);
 }
 
 // 登录后调用此函数确保数据同步
 export async function ensureCloudSync(user: User): Promise<void> {
   if (hasGithubToken()) {
-    await syncToGist(user.username, user.username);
+    await syncToGist(user.username);
   }
 }
 
@@ -299,10 +299,10 @@ export function saveStats(stats: UserStats) {
     allStats[stats.userId] = stats;
     localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
     
-    // 自动同步到 JSONBin（异步，不阻塞）
+    // 自动同步到云端（异步，不阻塞）
     const user = getCurrentUser();
     if (user) {
-      syncToJsonBin(stats.userId, user.username);
+      syncToGist(user.username);
     }
   } catch {}
 }
@@ -480,10 +480,10 @@ export function getMasteredQuestions(): MasteredQuestion[] {
 export function saveMasteredQuestions(mastered: MasteredQuestion[]) {
   localStorage.setItem(KEYS.masteredQuestions, JSON.stringify(mastered));
   
-  // 自动同步到 JSONBin（异步，不阻塞）
+  // 自动同步到云端（异步，不阻塞）
   const user = getCurrentUser();
   if (user) {
-    syncToJsonBin(user.id, user.username);
+    syncToGist(user.username);
   }
 }
 
