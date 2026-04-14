@@ -44,6 +44,7 @@ export function saveUser(user: User) {
 export function login(username: string, password: string): User | null {
   const users = getUsers();
   const stored = localStorage.getItem(`pwd_${username}`);
+  // 密码必须匹配才能登录
   if (!stored || stored !== password) return null;
   return users.find(u => u.username === username) || null;
 }
@@ -119,34 +120,9 @@ export async function loginWithCloudSync(username: string, password: string): Pr
   const existingUser = users.find(u => u.username === username);
   
   if (existingUser) {
-    console.log('用户已存在但密码不同，更新密码...');
-    localStorage.setItem(`pwd_${username}`, password);
-    setCurrentUser(existingUser);
-    
-    // 无论密码是否相同，都尝试从云端恢复数据
-    if (hasGithubToken()) {
-      try {
-        const cloudData = await getGistData(username);
-        if (cloudData && cloudData.banks && cloudData.banks.length > 0) {
-          console.log('从云端恢复题库数据...');
-          localStorage.setItem(getBankKey(username), JSON.stringify(cloudData.banks));
-          if (cloudData.stats) {
-            const allStats: Record<string, UserStats> = JSON.parse(localStorage.getItem(KEYS.stats) || '{}');
-            allStats[username] = cloudData.stats;
-            localStorage.setItem(KEYS.stats, JSON.stringify(allStats));
-          }
-          if (cloudData.masteredQuestions?.length > 0) {
-            saveMasteredQuestions(cloudData.masteredQuestions);
-          }
-          console.log('✅ 云端数据恢复完成！');
-        }
-        // 同步本地数据到云端
-        await syncToGist(username);
-      } catch(e) {
-        console.log('云端同步出错:', e);
-      }
-    }
-    return { user: existingUser };
+    // 密码不匹配，拒绝登录
+    console.log('用户已存在，密码错误，拒绝登录');
+    return { user: null };
   }
   
   // 3. 用户完全不存在 → 尝试从云端恢复
