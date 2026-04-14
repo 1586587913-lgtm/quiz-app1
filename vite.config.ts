@@ -3,25 +3,33 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? '/quiz-app1/' : './',
-  plugins: [
-    react(),
-    tailwindcss(),
-  ],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
+export default defineConfig(({ command, isSsrBuild }) => {
+  // GitHub Actions 使用绝对路径
+  const isCI = process.env.GITHUB_ACTIONS === 'true' || 
+               process.env.CI === 'true' ||
+               process.argv.includes('--ci');
+  const base = isCI ? '/quiz-app1/' : './';
+  
+  return {
+    base,
+    plugins: [
+      react(),
+      tailwindcss(),
+    ],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+      },
     },
-  },
-  optimizeDeps: {
-    include: ['pdfjs-dist'],
-  },
-  worker: {
-    format: 'es',
-  },
-  server: {
-    host: '0.0.0.0',  // 允许局域网访问
-    port: 5173,
-  },
-})
+    optimizeDeps: {
+      include: ['pdfjs-dist'],
+    },
+    worker: {
+      format: 'es',
+    },
+    server: {
+      host: '0.0.0.0',
+      port: 5173,
+    },
+  };
+});
