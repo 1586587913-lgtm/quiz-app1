@@ -5,7 +5,10 @@ import {
   getGistData,
   setGithubToken as saveGithubToken,
   hasGithubToken,
-  validateGithubToken
+  validateGithubToken,
+  getCachedGistId,
+  findUserGist,
+  getToken
 } from './gistSync';
 
 // 重新导出供其他模块使用
@@ -244,11 +247,22 @@ export async function resetCloudPassword(username: string, newPassword: string):
     if (!cloudData || cloudData.username !== username) {
       return false;
     }
+    
+    // 获取 Gist ID（从缓存或搜索）
+    const token = getToken();
+    let gistId = getCachedGistId(username);
+    if (!gistId) {
+      gistId = await findUserGist(username, token);
+    }
+    if (!gistId) {
+      console.error('未找到用户 Gist');
+      return false;
+    }
+    
     // 更新密码
     cloudData.password = newPassword;
+    
     // 保存回 Gist
-    const token = localStorage.getItem('github_token');
-    const gistId = cloudData.gistId;
     const response = await fetch(`https://api.github.com/gists/${gistId}`, {
       method: 'PATCH',
       headers: {

@@ -298,3 +298,6 @@ export async function getGistData(username: string): Promise<any | null> {
     return null;
   }
 }
+
+// 导出私有函数供 storage.ts 使用
+export { getCachedGistId, findUserGist, getToken };
