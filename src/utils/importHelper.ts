@@ -353,6 +353,24 @@ function parseQuestionBlock(block: string): Partial<Question> | null {
       rest = rest.replace(ans3Match[0], '');
     }
   }
+
+  // 格式6: 选A 选C（无冒号，直接连着，如2020年法规真题格式）
+  if (!answerStr) {
+    const xuanMatch = rest.match(/选\s*([A-D]{1,4})(?!\s*项)/i);
+    if (xuanMatch) {
+      answerStr = xuanMatch[1].toUpperCase();
+      rest = rest.replace(xuanMatch[0], '');
+    }
+  }
+
+  // 格式7: 选：A 选：C（带冒号但无方括号）
+  if (!answerStr) {
+    const xuanMatch = rest.match(/选\s*[:：]\s*([A-D]{1,4})/i);
+    if (xuanMatch) {
+      answerStr = xuanMatch[1].toUpperCase();
+      rest = rest.replace(xuanMatch[0], '');
+    }
+  }
   
   // 解析答案数组
   answer = answerStr ? [...answerStr] : [];
