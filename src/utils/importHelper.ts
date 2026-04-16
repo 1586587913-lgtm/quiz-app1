@@ -957,14 +957,34 @@ function parseAnswer(answerStr: string): string[] {
  * 注意：需要网络连接加载 WASM 文件
  */
 export async function performOCR(imageFile: File): Promise<string> {
-  // 动态导入 Tesseract.js
-  const Tesseract = await import('tesseract.js');
-  
-  const result = await Tesseract.recognize(imageFile, 'chi_sim+eng', {
-    logger: (m) => console.log('[OCR]', m.status, m.progress)
-  });
-  
-  return result.data.text;
+  try {
+    // 动态导入 Tesseract.js
+    const Tesseract = await import('tesseract.js');
+    
+    // 创建 worker 并设置参数
+    const worker = await Tesseract.createWorker('chi_sim+eng');
+    
+    // 设置识别参数，提高中文识别准确率
+    await worker.setParameters({
+      tessedit_pageseg_mode: '3', // 自动分页
+      preserve_interword_spaces: '1',
+    });
+    
+    // 读取图片并转为 base64
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+    const dataUrl = `data:${imageFile.type};base64,${base64}`;
+    
+    const result = await worker.recognize(dataUrl);
+    await worker.terminate();
+    
+    return result.data.text;
+  } catch (error) {
+    console.error('[OCR] 识别失败:', error);
+    throw new Error('OCR 识别失败，请确保图片文字清晰可读');
+  }
 }
 
 // ========================
