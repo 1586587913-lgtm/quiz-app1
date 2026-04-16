@@ -961,15 +961,6 @@ export async function performOCR(imageFile: File): Promise<string> {
     // 动态导入 Tesseract.js
     const Tesseract = await import('tesseract.js');
     
-    // 创建 worker 并设置参数
-    const worker = await Tesseract.createWorker('chi_sim+eng');
-    
-    // 设置识别参数，提高中文识别准确率
-    await worker.setParameters({
-      tessedit_pageseg_mode: '3', // 自动分页
-      preserve_interword_spaces: '1',
-    });
-    
     // 读取图片并转为 base64
     const arrayBuffer = await imageFile.arrayBuffer();
     const base64 = btoa(
@@ -977,9 +968,18 @@ export async function performOCR(imageFile: File): Promise<string> {
     );
     const dataUrl = `data:${imageFile.type};base64,${base64}`;
     
-    const result = await worker.recognize(dataUrl);
-    await worker.terminate();
+    console.log('[OCR] 开始识别图片...');
     
+    // 使用 recognize 方法进行识别（更稳定）
+    const result = await Tesseract.recognize(dataUrl, 'chi_sim+eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          console.log(`[OCR] 识别进度: ${Math.round(m.progress * 100)}%`);
+        }
+      }
+    });
+    
+    console.log('[OCR] 识别完成');
     return result.data.text;
   } catch (error) {
     console.error('[OCR] 识别失败:', error);
